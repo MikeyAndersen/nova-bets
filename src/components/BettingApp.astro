@@ -183,6 +183,13 @@
   }
   .odds-btn.selected .odds-val { color: var(--gold); }
 
+  .match-bookmaker {
+    font-size: 0.65rem;
+    color: rgba(255,255,255,0.25);
+    text-align: right;
+    margin-top: 0.4rem;
+  }
+
   .odds-name {
     font-size: 0.72rem;
     color: var(--muted);
@@ -424,8 +431,25 @@
 (function () {
   var LEAGUES = [
     'soccer_epl',
+    'soccer_efl_champ',
     'soccer_uefa_champs_league',
-    'soccer_denmark_superliga'
+    'soccer_uefa_europa_league',
+    'soccer_uefa_europa_conference_league',
+    'soccer_germany_bundesliga',
+    'soccer_germany_bundesliga2',
+    'soccer_spain_la_liga',
+    'soccer_spain_segunda_division',
+    'soccer_italy_serie_a',
+    'soccer_italy_serie_b',
+    'soccer_france_ligue_one',
+    'soccer_france_ligue_two',
+    'soccer_denmark_superliga',
+    'soccer_netherlands_eredivisie',
+    'soccer_portugal_primeira_liga',
+    'soccer_turkey_super_league',
+    'soccer_sweden_allsvenskan',
+    'soccer_norway_eliteserien',
+    'soccer_finland_veikkausliiga'
   ];
   var API_KEY        = '3a9a2207c105619994c376d25f8b34ed';
   var CACHE_KEY      = 'nb_odds_cache';
@@ -477,7 +501,18 @@
 
   function renderCard(match) {
     matchStore[match.id] = match;
-    var bm = match.bookmakers && match.bookmakers.find(function(b) { return b.key === 'bet365'; });
+    var bookmakers = match.bookmakers || [];
+
+    // Prefer bet365, fall back to any bookmaker with h2h market
+    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; });
+    var bookmakerLabel = null;
+    if (!bm) {
+      bm = bookmakers.find(function(b) {
+        return b.markets && b.markets.some(function(m) { return m.key === 'h2h'; });
+      });
+      if (bm) bookmakerLabel = bm.title || bm.key;
+    }
+
     var market = bm && bm.markets && bm.markets.find(function(m) { return m.key === 'h2h'; });
     if (!market) return '';
 
@@ -493,6 +528,7 @@
         oddsBtn(match.id, 'Draw', draw.price, '') +
         oddsBtn(match.id, away.name, away.price, '') +
       '</div>' +
+      (bookmakerLabel ? '<div class="match-bookmaker">' + esc(bookmakerLabel) + '</div>' : '') +
     '</div>';
   }
 
@@ -518,41 +554,86 @@
     return html;
   }
 
-  /* ── Load odds — single batched fetch with 15-min localStorage cache ── */
+  /* ── Date range helpers ── */
+  function todayRange() {
+    var n = new Date();
+    var from = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 0, 0, 0)).toISOString();
+    var to   = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 23, 59, 59)).toISOString();
+    return { from: from, to: to };
+  }
+  function weekRange() {
+    var from = new Date().toISOString();
+    var to   = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    return { from: from, to: to };
+  }
+
+  /* ── Check which leagues have events in a time window (free endpoint) ── */
+  async function leaguesWithEvents(from, to) {
+    var checks = await Promise.all(
+      LEAGUES.map(function (league) {
+        var url = 'https://api.the-odds-api.com/v4/sports/' + league +
+          '/events?apiKey=' + API_KEY +
+          '&commenceTimeFrom=' + encodeURIComponent(from) +
+          '&commenceTimeTo='   + encodeURIComponent(to);
+        return fetch(url)
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .catch(function ()  { return []; })
+          .then(function (events) {
+            return Array.isArray(events) && events.length > 0 ? league : null;
+          });
+      })
+    );
+    return checks.filter(Boolean);
+  }
+
+  /* ── Fetch odds for a list of leagues ── */
+  async function fetchOdds(leagues) {
+    var responses = await Promise.all(
+      leagues.map(function (league) {
+        var url = 'https://api.the-odds-api.com/v4/sports/' + league +
+          '/odds/?apiKey=' + API_KEY +
+          '&regions=eu&markets=h2h&oddsFormat=decimal';
+        return fetch(url)
+          .then(function (r) {
+            var rem = r.headers.get('x-requests-remaining');
+            if (rem !== null) setQuotaDisplay(rem);
+            return r.ok ? r.json() : [];
+          })
+          .catch(function () { return []; });
+      })
+    );
+    return responses.flat ? responses.flat() : [].concat.apply([], responses);
+  }
+
+  /* ── Main loader with caching and smart league detection ── */
   async function loadOdds() {
     matchStore = {};
     var container = document.getElementById('matchesContainer');
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Henter kampe…</span></div>';
 
     try {
-      var allMatches = null;
+      var allMatches;
 
-      // Check cache freshness
+      // Serve from cache if still fresh
       var cachedTime = parseInt(localStorage.getItem(CACHE_TIME_KEY) || '0', 10);
       var cachedData = localStorage.getItem(CACHE_KEY);
       if (cachedData && Date.now() - cachedTime < CACHE_TTL_MS) {
         allMatches = JSON.parse(cachedData);
         setQuotaDisplay('–');
       } else {
-        // Parallel fetch for each league
-        var responses = await Promise.all(
-          LEAGUES.map(function (league) {
-            return fetch('https://api.the-odds-api.com/v4/sports/' + league +
-              '/odds/?apiKey=' + API_KEY +
-              '&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal')
-              .then(function (r) {
-                var remaining = r.headers.get('x-requests-remaining');
-                if (remaining !== null) setQuotaDisplay(remaining);
-                return r.ok ? r.json() : [];
-              })
-              .catch(function () { return []; });
-          })
-        );
+        // Step 1: find leagues with events today (free — no quota cost)
+        var range = todayRange();
+        var active = await leaguesWithEvents(range.from, range.to);
 
-        allMatches = responses.flat ? responses.flat() : [].concat.apply([], responses);
-        if (!Array.isArray(allMatches)) throw new Error('Unexpected response format');
+        // Step 2: widen to 7 days if nothing is on today
+        if (active.length === 0) {
+          range = weekRange();
+          active = await leaguesWithEvents(range.from, range.to);
+        }
 
-        // Cache results
+        // Step 3: fetch odds only for leagues that have matches
+        allMatches = active.length > 0 ? await fetchOdds(active) : [];
+
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
       }
