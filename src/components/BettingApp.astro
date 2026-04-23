@@ -422,7 +422,12 @@
 
 <script is:inline>
 (function () {
-  var ODDS_URL = 'https://api.the-odds-api.com/v4/odds/?apiKey=3a9a2207c105619994c376d25f8b34ed&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal&sports=soccer_epl,soccer_uefa_champs_league,soccer_germany_bundesliga,soccer_spain_la_liga,soccer_france_ligue_one,soccer_italy_serie_a,soccer_denmark_superliga';
+  var LEAGUES = [
+    'soccer_epl',
+    'soccer_uefa_champs_league',
+    'soccer_denmark_superliga'
+  ];
+  var API_KEY        = '3a9a2207c105619994c376d25f8b34ed';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
   var CACHE_TTL_MS   = 1 * 60 * 1000; // 1 minute
@@ -529,20 +534,27 @@
         allMatches = JSON.parse(cachedData);
         setQuotaDisplay('–');
       } else {
-        // Single batched fetch
-        var res = await fetch(ODDS_URL);
-        if (!res.ok) throw new Error('API ' + res.status);
+        // Parallel fetch for each league
+        var responses = await Promise.all(
+          LEAGUES.map(function (league) {
+            return fetch('https://api.the-odds-api.com/v4/sports/' + league +
+              '/odds/?apiKey=' + API_KEY +
+              '&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal')
+              .then(function (r) {
+                var remaining = r.headers.get('x-requests-remaining');
+                if (remaining !== null) setQuotaDisplay(remaining);
+                return r.ok ? r.json() : [];
+              })
+              .catch(function () { return []; });
+          })
+        );
 
-        allMatches = await res.json();
+        allMatches = responses.flat ? responses.flat() : [].concat.apply([], responses);
         if (!Array.isArray(allMatches)) throw new Error('Unexpected response format');
 
         // Cache results
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
-
-        // Show remaining quota from response header
-        var remaining = res.headers.get('x-requests-remaining');
-        setQuotaDisplay(remaining !== null ? remaining : '–');
       }
 
       if (allMatches.length === 0) {
