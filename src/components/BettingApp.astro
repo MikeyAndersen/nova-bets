@@ -425,7 +425,7 @@
   var ODDS_URL = 'https://api.the-odds-api.com/v4/odds/?apiKey=3a9a2207c105619994c376d25f8b34ed&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal&sports=soccer_epl,soccer_uefa_champs_league,soccer_germany_bundesliga,soccer_spain_la_liga,soccer_france_ligue_one,soccer_italy_serie_a,soccer_denmark_superliga';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
-  var CACHE_TTL_MS   = 15 * 60 * 1000; // 15 minutes
+  var CACHE_TTL_MS   = 1 * 60 * 1000; // 1 minute
 
   var matchStore = {};
   var current = null; // { matchId, outcome, odds }
