@@ -414,7 +414,8 @@
 
 <script is:inline>
 (function () {
-  var API = 'https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey=3a9a2207c105619994c376d25f8b34ed&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal';
+  var API_KEY = '3a9a2207c105619994c376d25f8b34ed';
+  var SPORTS_URL = 'https://api.the-odds-api.com/v4/sports/?apiKey=' + API_KEY;
 
   var matchStore = {};
   var current = null; // { matchId, outcome, odds }
@@ -480,48 +481,104 @@
     '</div>';
   }
 
-  /* ── Load odds ── */
+  /* ── Load odds (two-step: sports list → odds per sport) ── */
   async function loadOdds() {
     matchStore = {};
     var container = document.getElementById('matchesContainer');
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Henter kampe…</span></div>';
 
     try {
-      var res = await fetch(API);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var matches = await res.json();
+      // Step 1: discover active soccer sports
+      console.log('[NovaBets] Step 1 — fetching sports list:', SPORTS_URL);
+      var sportsRes = await fetch(SPORTS_URL);
+      console.log('[NovaBets] Sports response:', sportsRes.status, sportsRes.statusText);
+      if (!sportsRes.ok) throw new Error('Sports API ' + sportsRes.status);
 
-      if (!Array.isArray(matches) || matches.length === 0) {
+      var allSports = await sportsRes.json();
+      console.log('[NovaBets] Total sports returned:', allSports.length);
+
+      var soccerSports = allSports.filter(function (s) {
+        return s.group === 'Soccer' && s.active === true;
+      });
+      console.log('[NovaBets] Active soccer sports (' + soccerSports.length + '):', soccerSports.map(function (s) { return s.key; }));
+
+      if (soccerSports.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>Ingen aktive fodboldligaer tilgængelige</p></div>';
+        return;
+      }
+
+      // Step 2: fetch odds for every soccer sport in parallel
+      console.log('[NovaBets] Step 2 — fetching odds for each sport...');
+      var oddsPromises = soccerSports.map(function (sport) {
+        var url = 'https://api.the-odds-api.com/v4/sports/' + sport.key +
+          '/odds/?apiKey=' + API_KEY +
+          '&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal';
+        console.log('[NovaBets] Fetching:', sport.key);
+        return fetch(url)
+          .then(function (r) {
+            console.log('[NovaBets]', sport.key, '→ status', r.status);
+            if (!r.ok) return [];
+            return r.json();
+          })
+          .then(function (data) {
+            var matches = Array.isArray(data) ? data : [];
+            console.log('[NovaBets]', sport.key, '→', matches.length, 'matches');
+            return matches;
+          })
+          .catch(function (err) {
+            console.warn('[NovaBets] Fetch error for', sport.key, err);
+            return [];
+          });
+      });
+
+      var results = await Promise.all(oddsPromises);
+
+      // Merge all matches into one flat array
+      var allMatches = [];
+      results.forEach(function (arr) { allMatches = allMatches.concat(arr); });
+      console.log('[NovaBets] Total matches across all sports:', allMatches.length);
+
+      if (allMatches.length > 0) {
+        var sample = allMatches[0];
+        console.log('[NovaBets] Sample match — id:', sample.id,
+          '| bookmakers:', (sample.bookmakers || []).map(function(b){ return b.key; }),
+          '| home:', sample.home_team, '| away:', sample.away_team);
+      }
+
+      if (allMatches.length === 0) {
         container.innerHTML = '<div class="empty-state"><p>Ingen kampe tilgængelige</p></div>';
         return;
       }
 
-      // Group by sport_title
+      // Group by league, render cards, skip leagues where no card rendered
       var byLeague = {};
-      for (var i = 0; i < matches.length; i++) {
-        var m = matches[i];
+      allMatches.forEach(function (m) {
         var lg = m.sport_title || 'Ukendt liga';
         if (!byLeague[lg]) byLeague[lg] = [];
         byLeague[lg].push(m);
-      }
+      });
 
       var html = '';
-      var leagues = Object.keys(byLeague).sort();
-      for (var li = 0; li < leagues.length; li++) {
-        var league = leagues[li];
-        var games = byLeague[league];
+      Object.keys(byLeague).sort().forEach(function (league) {
+        var cards = byLeague[league].map(renderCard).filter(Boolean);
+        console.log('[NovaBets]', league, '—', byLeague[league].length, 'matches,', cards.length, 'rendered');
+        if (cards.length === 0) return;
         html += '<div class="league-section">' +
           '<h2 class="league-header">' + esc(league) + '</h2>' +
-          '<div class="match-list">';
-        for (var gi = 0; gi < games.length; gi++) {
-          html += renderCard(games[gi]);
-        }
-        html += '</div></div>';
+          '<div class="match-list">' + cards.join('') + '</div>' +
+          '</div>';
+      });
+
+      if (!html) {
+        container.innerHTML = '<div class="empty-state"><p>Ingen kampe med odds tilgængelige</p></div>';
+        return;
       }
 
       container.innerHTML = html;
+      console.log('[NovaBets] Render complete.');
 
     } catch (err) {
+      console.error('[NovaBets] Fatal error:', err);
       container.innerHTML = '<div class="error-state">' +
         '<p>Kunne ikke hente kampe. Tjek forbindelsen og prøv igen.</p>' +
         '<button class="btn-retry" id="btnRetry">Prøv igen</button>' +
