@@ -1,0 +1,289 @@
+---
+// BetHistory — two-tab panel: active bets + settled history
+---
+
+<section id="betHistory">
+  <div class="history-tabs" role="tablist">
+    <button class="h-tab active" id="tabBtnActive" role="tab" aria-selected="true" aria-controls="panelActive">
+      Aktive indsatser
+      <span class="tab-badge" id="badgeActive">0</span>
+    </button>
+    <button class="h-tab" id="tabBtnHistory" role="tab" aria-selected="false" aria-controls="panelHistory">
+      Historik
+      <span class="tab-badge" id="badgeHistory">0</span>
+    </button>
+  </div>
+
+  <div id="panelActive" role="tabpanel" aria-labelledby="tabBtnActive">
+    <div class="bets-list" id="activeList"></div>
+  </div>
+  <div id="panelHistory" role="tabpanel" aria-labelledby="tabBtnHistory" hidden>
+    <div class="bets-list" id="historyList"></div>
+  </div>
+</section>
+
+<style is:global>
+  #betHistory {
+    margin-top: 2.5rem;
+  }
+
+  .history-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+  }
+
+  .h-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: var(--font);
+    padding: 0.65rem 0.1rem;
+    margin-right: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    transition: color 0.18s, border-color 0.18s;
+    margin-bottom: -1px;
+  }
+  .h-tab:hover { color: var(--text); }
+  .h-tab.active {
+    color: var(--text);
+    border-bottom-color: var(--gold);
+  }
+
+  .tab-badge {
+    background: var(--surface2);
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    min-width: 1.4em;
+    text-align: center;
+    transition: background 0.18s, color 0.18s;
+  }
+  .h-tab.active .tab-badge {
+    background: rgba(242,199,68,0.15);
+    color: var(--gold);
+  }
+
+  /* ── Bet cards ── */
+  .bets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .bet-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+  }
+
+  .bet-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .bet-match {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.35;
+  }
+  .bet-league {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--mint);
+    margin-top: 0.15rem;
+  }
+
+  .bet-status-badge {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge-active {
+    background: rgba(0,100,66,0.18);
+    color: var(--mint);
+    border: 1px solid rgba(0,100,66,0.35);
+  }
+  .badge-settled {
+    background: rgba(255,255,255,0.06);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .badge-won {
+    background: rgba(0,180,80,0.15);
+    color: #4ade80;
+    border: 1px solid rgba(0,180,80,0.3);
+  }
+  .badge-lost {
+    background: rgba(200,50,50,0.12);
+    color: #f87171;
+    border: 1px solid rgba(200,50,50,0.25);
+  }
+
+  .bet-detail-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem 1.1rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .bet-detail-row span { display: flex; align-items: center; gap: 0.25rem; }
+  .bet-detail-row strong { color: var(--text); font-weight: 600; }
+
+  .bet-win-amount {
+    color: var(--mint);
+    font-weight: 700;
+  }
+
+  .no-bets {
+    padding: 3rem 2rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 600px) {
+    .bet-top { flex-direction: column; gap: 0.4rem; }
+    .bet-status-badge { align-self: flex-start; }
+  }
+</style>
+
+<script is:inline>
+(function () {
+  var activeTab = 'active';
+
+  function fmtKr(n) {
+    return new Intl.NumberFormat('da-DK').format(Math.round(n)) + ' kr';
+  }
+
+  function fmtDate(iso) {
+    return new Intl.DateTimeFormat('da-DK', {
+      timeZone: 'Europe/Copenhagen',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(iso));
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  function selLabel(bet) {
+    if (bet.selection === 'Draw') return 'Uafgjort';
+    if (bet.selection === bet.homeTeam) return bet.homeTeam + ' vinder';
+    return bet.awayTeam + ' vinder';
+  }
+
+  function renderBetCard(bet, isHistory) {
+    var badge, badgeText;
+    if (bet.status === 'won') {
+      badge = 'badge-won'; badgeText = 'Vundet';
+    } else if (bet.status === 'lost') {
+      badge = 'badge-lost'; badgeText = 'Tabt';
+    } else if (isHistory) {
+      badge = 'badge-settled'; badgeText = 'Afventer resultat';
+    } else {
+      badge = 'badge-active'; badgeText = 'Aktiv';
+    }
+
+    return '<div class="bet-card">' +
+      '<div class="bet-top">' +
+        '<div>' +
+          '<div class="bet-match">' + esc(bet.homeTeam) + ' vs ' + esc(bet.awayTeam) + '</div>' +
+          '<div class="bet-league">' + esc(bet.league) + '</div>' +
+        '</div>' +
+        '<span class="bet-status-badge ' + badge + '">' + badgeText + '</span>' +
+      '</div>' +
+      '<div class="bet-detail-row">' +
+        '<span>Valg: <strong>' + esc(selLabel(bet)) + '</strong></span>' +
+        '<span>Odds: <strong>' + parseFloat(bet.odds).toFixed(2) + '</strong></span>' +
+        '<span>Indsats: <strong>' + fmtKr(bet.stake) + '</strong></span>' +
+        '<span>Mulig gevinst: <strong class="bet-win-amount">' + fmtKr(bet.potentialWin) + '</strong></span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function render() {
+    var raw = localStorage.getItem('nb_bets');
+    var bets = raw ? JSON.parse(raw) : [];
+    var now = Date.now();
+    var changed = false;
+
+    for (var i = 0; i < bets.length; i++) {
+      var b = bets[i];
+      if (b.status === 'active' && new Date(b.commenceTime).getTime() < now) {
+        b.status = 'settled';
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      localStorage.setItem('nb_bets', JSON.stringify(bets));
+    }
+
+    var active = bets.filter(function(b) { return b.status === 'active'; });
+    var history = bets.filter(function(b) { return b.status !== 'active'; });
+
+    // Sort newest first
+    active.sort(function(a,b) { return new Date(b.placedAt) - new Date(a.placedAt); });
+    history.sort(function(a,b) { return new Date(b.placedAt) - new Date(a.placedAt); });
+
+    document.getElementById('badgeActive').textContent = active.length;
+    document.getElementById('badgeHistory').textContent = history.length;
+
+    var aList = document.getElementById('activeList');
+    if (active.length === 0) {
+      aList.innerHTML = '<div class="no-bets">Ingen aktive indsatser</div>';
+    } else {
+      aList.innerHTML = active.map(function(b) { return renderBetCard(b, false); }).join('');
+    }
+
+    var hList = document.getElementById('historyList');
+    if (history.length === 0) {
+      hList.innerHTML = '<div class="no-bets">Ingen afsluttede indsatser endnu</div>';
+    } else {
+      hList.innerHTML = history.map(function(b) { return renderBetCard(b, true); }).join('');
+    }
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tabBtnActive').classList.toggle('active', tab === 'active');
+    document.getElementById('tabBtnActive').setAttribute('aria-selected', tab === 'active' ? 'true' : 'false');
+    document.getElementById('tabBtnHistory').classList.toggle('active', tab === 'history');
+    document.getElementById('tabBtnHistory').setAttribute('aria-selected', tab === 'history' ? 'true' : 'false');
+    document.getElementById('panelActive').hidden = tab !== 'active';
+    document.getElementById('panelHistory').hidden = tab !== 'history';
+  }
+
+  document.getElementById('tabBtnActive').addEventListener('click', function() { switchTab('active'); });
+  document.getElementById('tabBtnHistory').addEventListener('click', function() { switchTab('history'); });
+
+  window.addEventListener('nb_bets_updated', render);
+
+  render();
+})();
+</script>

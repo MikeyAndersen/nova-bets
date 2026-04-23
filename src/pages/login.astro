@@ -1,0 +1,141 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Log ind" showNav={false} fullHeight={true}>
+  <div class="login-wrap">
+    <div class="login-card">
+      <p class="login-eyebrow">Velkommen til</p>
+      <h1 class="login-logo">NovaBets</h1>
+      <p class="login-sub">Kun for inviterede</p>
+      <form id="loginForm" autocomplete="on">
+        <input
+          type="password"
+          id="pwInput"
+          class="pw-input"
+          placeholder="Adgangskode"
+          autocomplete="current-password"
+          autofocus
+        />
+        <p class="err-msg" id="errMsg" aria-live="polite"></p>
+        <button type="submit" class="btn-login">Log ind</button>
+      </form>
+    </div>
+  </div>
+</Layout>
+
+<style is:global>
+  .login-wrap {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: var(--dark);
+  }
+
+  .login-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 2.75rem 2.5rem;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+  }
+
+  .login-eyebrow {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+
+  .login-logo {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--gold);
+    letter-spacing: -0.03em;
+    margin-bottom: 0.4rem;
+  }
+
+  .login-sub {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+  }
+
+  #loginForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .pw-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 0.8rem 1rem;
+    color: var(--text);
+    font-size: 1rem;
+    font-family: var(--font);
+    outline: none;
+    transition: border-color 0.18s;
+  }
+  .pw-input:focus { border-color: var(--green); }
+  .pw-input.err { border-color: #e05555; }
+
+  .err-msg {
+    font-size: 0.82rem;
+    color: #e05555;
+    min-height: 1.1em;
+    text-align: left;
+    padding: 0 0.1rem;
+  }
+
+  .btn-login {
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 0.82rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s;
+    font-family: var(--font);
+    margin-top: 0.2rem;
+  }
+  .btn-login:hover { background: #00784f; }
+  .btn-login:active { background: #005035; }
+</style>
+
+<script is:inline>
+  (function () {
+    if (localStorage.getItem('nb_auth') === 'true') {
+      window.location.replace('/');
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var pw = document.getElementById('pwInput');
+      var err = document.getElementById('errMsg');
+      if (pw.value === 'novatech2024') {
+        localStorage.setItem('nb_auth', 'true');
+        window.location.href = '/';
+      } else {
+        err.textContent = 'Forkert adgangskode — prøv igen.';
+        pw.classList.add('err');
+        pw.value = '';
+        pw.focus();
+        setTimeout(function () { pw.classList.remove('err'); }, 1500);
+      }
+    });
+
+    document.getElementById('pwInput').addEventListener('input', function () {
+      document.getElementById('errMsg').textContent = '';
+    });
+  })();
+</script>

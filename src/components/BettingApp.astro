@@ -1,0 +1,651 @@
+---
+// BettingApp — fetches odds, renders match cards, manages bet slip
+---
+
+<section id="bettingApp">
+  <div id="matchesContainer">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span>Henter kampe…</span>
+    </div>
+  </div>
+</section>
+
+<!-- Bet slip backdrop -->
+<div class="slip-backdrop" id="slipBackdrop"></div>
+
+<!-- Bet slip panel -->
+<aside class="bet-slip" id="betSlip" aria-hidden="true" aria-label="Bet slip">
+  <div class="slip-head">
+    <span class="slip-title">Bet Slip</span>
+    <button class="slip-close" id="slipClose" aria-label="Luk">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="slip-body">
+    <div class="slip-match-name" id="slipMatchName"></div>
+    <div class="slip-league" id="slipLeague"></div>
+    <div class="slip-selection-row">
+      <span class="slip-sel-label" id="slipSelLabel"></span>
+      <span class="slip-odds-badge" id="slipOddsBadge"></span>
+    </div>
+
+    <div class="stake-field">
+      <label for="stakeInput" class="stake-label">Indsats</label>
+      <div class="stake-wrap">
+        <input
+          type="number"
+          id="stakeInput"
+          class="stake-input"
+          placeholder="0"
+          min="10"
+          step="10"
+        />
+        <span class="stake-kr">kr</span>
+      </div>
+    </div>
+
+    <div class="potential-row">
+      <span class="potential-label">Mulig gevinst</span>
+      <span class="potential-val" id="potentialWin">0 kr</span>
+    </div>
+  </div>
+
+  <div class="slip-foot">
+    <button class="btn-cancel" id="slipCancel">Annuller</button>
+    <button class="btn-place" id="slipPlace">Placer indsats</button>
+  </div>
+</aside>
+
+<style is:global>
+  /* ── Shared loading / error / empty ── */
+  .loading-state,
+  .error-state,
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 5rem 2rem;
+    color: var(--muted);
+    text-align: center;
+    font-size: 0.95rem;
+  }
+
+  .spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255,255,255,0.08);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-retry {
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1.2rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: background 0.18s;
+  }
+  .btn-retry:hover { background: #00784f; }
+
+  /* ── League sections ── */
+  #matchesContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
+  }
+
+  .league-section { }
+
+  .league-header {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mint);
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.6rem;
+  }
+
+  .match-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  /* ── Match card ── */
+  .match-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+    transition: border-color 0.18s;
+  }
+  .match-card:hover { border-color: rgba(255,255,255,0.14); }
+
+  .match-time {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 0.65rem;
+    text-transform: capitalize;
+  }
+
+  .match-odds-row {
+    display: grid;
+    grid-template-columns: 1fr 72px 1fr;
+    gap: 0.45rem;
+    align-items: stretch;
+  }
+
+  /* ── Odds buttons ── */
+  .odds-btn {
+    background: rgba(0, 100, 66, 0.12);
+    border: 1px solid rgba(0, 100, 66, 0.28);
+    border-radius: 7px;
+    padding: 0.55rem 0.4rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .odds-btn:hover {
+    background: rgba(0, 100, 66, 0.25);
+    border-color: rgba(0, 100, 66, 0.55);
+  }
+  .odds-btn.selected {
+    background: rgba(242, 199, 68, 0.12);
+    border-color: var(--gold);
+  }
+  .odds-btn.selected .odds-val { color: var(--gold); }
+
+  .odds-name {
+    font-size: 0.72rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .odds-val {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  /* ── Bet slip ── */
+  .slip-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 200;
+    animation: fadeIn 0.2s ease;
+  }
+  .slip-backdrop.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .bet-slip {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 340px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 201;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .bet-slip.open { transform: translateX(0); }
+
+  .slip-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem 1.4rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .slip-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .slip-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s;
+  }
+  .slip-close:hover { color: var(--text); }
+
+  .slip-body {
+    flex: 1;
+    padding: 1.4rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .slip-match-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--text);
+  }
+  .slip-league {
+    font-size: 0.72rem;
+    color: var(--mint);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: -0.6rem;
+  }
+
+  .slip-selection-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+  }
+  .slip-sel-label {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .slip-odds-badge {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--gold);
+    letter-spacing: -0.02em;
+  }
+
+  .stake-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .stake-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .stake-wrap {
+    position: relative;
+  }
+  .stake-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 2.8rem 0.75rem 0.9rem;
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    outline: none;
+    transition: border-color 0.18s;
+    font-family: var(--font);
+    -moz-appearance: textfield;
+  }
+  .stake-input::-webkit-inner-spin-button,
+  .stake-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .stake-input:focus { border-color: var(--green); }
+  .stake-input.shake {
+    animation: shake 0.38s ease;
+    border-color: #e05555 !important;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%,60%  { transform: translateX(-5px); }
+    40%,80%  { transform: translateX(5px); }
+  }
+  .stake-kr {
+    position: absolute;
+    right: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.82rem;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  .potential-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+  }
+  .potential-label { font-size: 0.82rem; color: var(--muted); }
+  .potential-val {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--mint);
+  }
+
+  .slip-foot {
+    display: flex;
+    gap: 0.65rem;
+    padding: 1.1rem 1.4rem;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .btn-cancel {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.72rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: var(--font);
+    transition: border-color 0.18s, color 0.18s;
+  }
+  .btn-cancel:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+  .btn-place {
+    flex: 2;
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.72rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: var(--font);
+    transition: background 0.18s;
+  }
+  .btn-place:hover { background: #00784f; }
+
+  /* ── Mobile: bottom sheet ── */
+  @media (max-width: 620px) {
+    .bet-slip {
+      top: auto;
+      left: 0;
+      right: 0;
+      width: 100%;
+      height: 88vh;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      transform: translateY(100%);
+    }
+    .bet-slip.open { transform: translateY(0); }
+
+    .match-odds-row {
+      grid-template-columns: 1fr 64px 1fr;
+      gap: 0.35rem;
+    }
+  }
+</style>
+
+<script is:inline>
+(function () {
+  var API = 'https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey=3a9a2207c105619994c376d25f8b34ed&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal';
+
+  var matchStore = {};
+  var current = null; // { matchId, outcome, odds }
+
+  /* ── Utilities ── */
+  function fmtKr(n) {
+    return new Intl.NumberFormat('da-DK').format(Math.round(n)) + ' kr';
+  }
+
+  function fmtDate(iso) {
+    return new Intl.DateTimeFormat('da-DK', {
+      timeZone: 'Europe/Copenhagen',
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(iso));
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  function selectionLabel(outcome, homeTeam, awayTeam) {
+    if (outcome === 'Draw') return 'Uafgjort';
+    if (outcome === homeTeam) return homeTeam + ' vinder';
+    return awayTeam + ' vinder';
+  }
+
+  /* ── Render helpers ── */
+  function oddsBtn(matchId, outcomeName, price, extraClass) {
+    var disp = outcomeName === 'Draw' ? 'X' : outcomeName;
+    return '<button class="odds-btn' + (extraClass ? ' ' + extraClass : '') + '"' +
+      ' data-mid="' + esc(matchId) + '"' +
+      ' data-outcome="' + esc(outcomeName) + '"' +
+      ' data-odds="' + price + '">' +
+      '<span class="odds-name">' + esc(disp) + '</span>' +
+      '<span class="odds-val">' + price + '</span>' +
+      '</button>';
+  }
+
+  function renderCard(match) {
+    matchStore[match.id] = match;
+    var bm = match.bookmakers && match.bookmakers.find(function(b) { return b.key === 'bet365'; });
+    var market = bm && bm.markets && bm.markets.find(function(m) { return m.key === 'h2h'; });
+    if (!market) return '';
+
+    var ocs = market.outcomes || [];
+    var home = ocs.find(function(o){ return o.name === match.home_team; }) || { name: match.home_team, price: '–' };
+    var away = ocs.find(function(o){ return o.name === match.away_team; }) || { name: match.away_team, price: '–' };
+    var draw = ocs.find(function(o){ return o.name === 'Draw'; }) || { name: 'Draw', price: '–' };
+
+    return '<div class="match-card">' +
+      '<div class="match-time">' + esc(fmtDate(match.commence_time)) + '</div>' +
+      '<div class="match-odds-row">' +
+        oddsBtn(match.id, home.name, home.price, '') +
+        oddsBtn(match.id, 'Draw', draw.price, '') +
+        oddsBtn(match.id, away.name, away.price, '') +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ── Load odds ── */
+  async function loadOdds() {
+    matchStore = {};
+    var container = document.getElementById('matchesContainer');
+    container.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Henter kampe…</span></div>';
+
+    try {
+      var res = await fetch(API);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var matches = await res.json();
+
+      if (!Array.isArray(matches) || matches.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>Ingen kampe tilgængelige</p></div>';
+        return;
+      }
+
+      // Group by sport_title
+      var byLeague = {};
+      for (var i = 0; i < matches.length; i++) {
+        var m = matches[i];
+        var lg = m.sport_title || 'Ukendt liga';
+        if (!byLeague[lg]) byLeague[lg] = [];
+        byLeague[lg].push(m);
+      }
+
+      var html = '';
+      var leagues = Object.keys(byLeague).sort();
+      for (var li = 0; li < leagues.length; li++) {
+        var league = leagues[li];
+        var games = byLeague[league];
+        html += '<div class="league-section">' +
+          '<h2 class="league-header">' + esc(league) + '</h2>' +
+          '<div class="match-list">';
+        for (var gi = 0; gi < games.length; gi++) {
+          html += renderCard(games[gi]);
+        }
+        html += '</div></div>';
+      }
+
+      container.innerHTML = html;
+
+    } catch (err) {
+      container.innerHTML = '<div class="error-state">' +
+        '<p>Kunne ikke hente kampe. Tjek forbindelsen og prøv igen.</p>' +
+        '<button class="btn-retry" id="btnRetry">Prøv igen</button>' +
+        '</div>';
+      document.getElementById('btnRetry').addEventListener('click', loadOdds);
+    }
+  }
+
+  /* ── Bet slip ── */
+  function openSlip(matchId, outcome, odds) {
+    var match = matchStore[matchId];
+    if (!match) return;
+    current = { matchId: matchId, outcome: outcome, odds: parseFloat(odds) };
+
+    document.getElementById('slipMatchName').textContent = match.home_team + ' vs ' + match.away_team;
+    document.getElementById('slipLeague').textContent = match.sport_title || '';
+    document.getElementById('slipSelLabel').textContent = selectionLabel(outcome, match.home_team, match.away_team);
+    document.getElementById('slipOddsBadge').textContent = parseFloat(odds).toFixed(2);
+
+    var si = document.getElementById('stakeInput');
+    si.value = '';
+    document.getElementById('potentialWin').textContent = '0 kr';
+
+    document.getElementById('betSlip').classList.add('open');
+    document.getElementById('betSlip').setAttribute('aria-hidden', 'false');
+    document.getElementById('slipBackdrop').classList.add('active');
+    si.focus();
+  }
+
+  function closeSlip() {
+    document.getElementById('betSlip').classList.remove('open');
+    document.getElementById('betSlip').setAttribute('aria-hidden', 'true');
+    document.getElementById('slipBackdrop').classList.remove('active');
+    document.querySelectorAll('.odds-btn.selected').forEach(function(b) { b.classList.remove('selected'); });
+    current = null;
+  }
+
+  function placeBet() {
+    if (!current) return;
+    var si = document.getElementById('stakeInput');
+    var stake = parseFloat(si.value);
+
+    if (isNaN(stake) || stake < 10) {
+      triggerShake(si);
+      return;
+    }
+
+    var balance = parseFloat(localStorage.getItem('nb_balance') || '0');
+    if (stake > balance) {
+      triggerShake(si);
+      return;
+    }
+
+    var match = matchStore[current.matchId];
+    if (!match) return;
+
+    // Deduct balance
+    localStorage.setItem('nb_balance', String(balance - stake));
+    window.dispatchEvent(new Event('nb_balance_updated'));
+
+    // Store bet
+    var bets = JSON.parse(localStorage.getItem('nb_bets') || '[]');
+    bets.push({
+      id: Date.now().toString(),
+      matchId: current.matchId,
+      homeTeam: match.home_team,
+      awayTeam: match.away_team,
+      league: match.sport_title || '',
+      selection: current.outcome,
+      odds: current.odds,
+      stake: stake,
+      potentialWin: stake * current.odds,
+      placedAt: new Date().toISOString(),
+      commenceTime: match.commence_time,
+      status: 'active'
+    });
+    localStorage.setItem('nb_bets', JSON.stringify(bets));
+    window.dispatchEvent(new Event('nb_bets_updated'));
+
+    closeSlip();
+  }
+
+  function triggerShake(el) {
+    el.classList.remove('shake');
+    void el.offsetWidth; // reflow
+    el.classList.add('shake');
+    el.addEventListener('animationend', function() { el.classList.remove('shake'); }, { once: true });
+    el.focus();
+  }
+
+  /* ── Event delegation on matches container ── */
+  document.getElementById('matchesContainer').addEventListener('click', function (e) {
+    var btn = e.target.closest('.odds-btn');
+    if (!btn) return;
+
+    document.querySelectorAll('.odds-btn.selected').forEach(function(b) { b.classList.remove('selected'); });
+    btn.classList.add('selected');
+
+    openSlip(
+      btn.getAttribute('data-mid'),
+      btn.getAttribute('data-outcome'),
+      btn.getAttribute('data-odds')
+    );
+  });
+
+  /* ── Stake input → potential win ── */
+  document.getElementById('stakeInput').addEventListener('input', function () {
+    var stake = parseFloat(this.value) || 0;
+    var odds = current ? current.odds : 0;
+    document.getElementById('potentialWin').textContent = stake > 0 && odds > 0 ? fmtKr(stake * odds) : '0 kr';
+  });
+
+  /* ── Slip controls ── */
+  document.getElementById('slipClose').addEventListener('click', closeSlip);
+  document.getElementById('slipCancel').addEventListener('click', closeSlip);
+  document.getElementById('slipBackdrop').addEventListener('click', closeSlip);
+  document.getElementById('slipPlace').addEventListener('click', placeBet);
+
+  /* ── Keyboard: Escape closes slip ── */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeSlip();
+  });
+
+  /* ── Init ── */
+  loadOdds();
+})();
+</script>
