@@ -429,65 +429,152 @@
 
 <script is:inline>
 (function () {
-  var LEAGUES = [
-    'soccer_epl',
-    'soccer_uefa_champs_league',
-    'soccer_uefa_europa_league',
-    'soccer_uefa_europa_conference_league',
-    'soccer_germany_bundesliga',
-    'soccer_germany_bundesliga2',
-    'soccer_spain_la_liga',
-    'soccer_spain_segunda_division',
-    'soccer_italy_serie_a',
-    'soccer_italy_serie_b',
-    'soccer_france_ligue_one',
-    'soccer_france_ligue_two',
-    'soccer_denmark_superliga',
-    'soccer_netherlands_eredivisie',
-    'soccer_portugal_primeira_liga',
-    'soccer_turkey_super_league',
-    'soccer_norway_eliteserien'
-  ];
-  var API_KEY        = '3a9a2207c105619994c376d25f8b34ed';
+  var LEAGUE_MAP = {
+    soccer_epl:                           { apif: 39,  name: 'Premier League' },
+    soccer_uefa_champs_league:            { apif: 2,   name: 'Champions League' },
+    soccer_uefa_europa_league:            { apif: 3,   name: 'Europa League' },
+    soccer_uefa_europa_conference_league: { apif: 848, name: 'Conference League' },
+    soccer_germany_bundesliga:            { apif: 78,  name: 'Bundesliga' },
+    soccer_germany_bundesliga2:           { apif: 79,  name: '2. Bundesliga' },
+    soccer_spain_la_liga:                 { apif: 140, name: 'La Liga' },
+    soccer_spain_segunda_division:        { apif: 141, name: 'La Liga 2' },
+    soccer_italy_serie_a:                 { apif: 135, name: 'Serie A' },
+    soccer_italy_serie_b:                 { apif: 136, name: 'Serie B' },
+    soccer_france_ligue_one:              { apif: 61,  name: 'Ligue 1' },
+    soccer_france_ligue_two:              { apif: 62,  name: 'Ligue 2' },
+    soccer_denmark_superliga:             { apif: 119, name: 'Superliga' },
+    soccer_netherlands_eredivisie:        { apif: 88,  name: 'Eredivisie' },
+    soccer_portugal_primeira_liga:        { apif: 94,  name: 'Primeira Liga' },
+    soccer_turkey_super_league:           { apif: 203, name: 'Süper Lig' },
+    soccer_norway_eliteserien:            { apif: 103, name: 'Eliteserien' }
+  };
+  var LEAGUES = Object.keys(LEAGUE_MAP);
+
+  var ODDS_API_KEY   = '3a9a2207c105619994c376d25f8b34ed';
+  var APIF_KEY       = '66466592dc0296d8fdc06408bfeecf40';
+  var APIF_BASE      = 'https://v3.football.api-sports.io';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
   var CACHE_TTL_MS   = 1 * 60 * 1000; // 1 minute
 
   var matchStore = {};
-  var current = null; // { matchId, outcome, odds }
+  var current = null;
 
   /* ── Utilities ── */
   function fmtKr(n) {
     return new Intl.NumberFormat('da-DK').format(Math.round(n)) + ' kr';
   }
-
   function fmtDate(iso) {
     return new Intl.DateTimeFormat('da-DK', {
       timeZone: 'Europe/Copenhagen',
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
+      weekday: 'short', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit'
     }).format(new Date(iso));
   }
-
   function esc(s) {
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
-
+  function todayDateStr() {
+    var n = new Date();
+    return n.getUTCFullYear() + '-' +
+      String(n.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(n.getUTCDate()).padStart(2, '0');
+  }
+  function todayRange() {
+    var n = new Date();
+    return {
+      from: new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 0, 0, 0)).toISOString(),
+      to:   new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 23, 59, 59)).toISOString()
+    };
+  }
+  function weekRange() {
+    return {
+      from: new Date().toISOString(),
+      to:   new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+  }
   function selectionLabel(outcome, homeTeam, awayTeam) {
     if (outcome === 'Draw') return 'Uafgjort';
     if (outcome === homeTeam) return homeTeam + ' vinder';
     return awayTeam + ' vinder';
   }
+  function setQuotaDisplay(value) {
+    var el = document.getElementById('apiQuota');
+    if (el) el.textContent = 'API-kald tilbage: ' + value;
+  }
+
+  /* ── Normalise: Odds API raw match → common shape ── */
+  function normalizeOddsApiMatch(m) {
+    var bookmakers = m.bookmakers || [];
+    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; });
+    var bmName = 'bet365';
+    if (!bm) {
+      bm = bookmakers.find(function(b) {
+        return b.markets && b.markets.some(function(mk) { return mk.key === 'h2h'; });
+      });
+      if (bm) bmName = bm.title || bm.key;
+    }
+    var market = bm && bm.markets && bm.markets.find(function(mk) { return mk.key === 'h2h'; });
+    if (!market) return null;
+    var ocs = market.outcomes || [];
+    var home = ocs.find(function(o) { return o.name === m.home_team; });
+    var away = ocs.find(function(o) { return o.name === m.away_team; });
+    var draw = ocs.find(function(o) { return o.name === 'Draw'; });
+    if (!home || !away || !draw) return null;
+    var info = LEAGUE_MAP[m.sport_key];
+    return {
+      id: m.id,
+      leagueName: info ? info.name : (m.sport_title || m.sport_key),
+      homeTeam: m.home_team,
+      awayTeam: m.away_team,
+      commenceTime: m.commence_time,
+      homeOdds: home.price,
+      drawOdds: draw.price,
+      awayOdds: away.price,
+      bookmaker: bmName,
+      source: 'odds-api'
+    };
+  }
+
+  /* ── Normalise: API-Football fixture + odds → common shape ── */
+  function normalizeApifMatch(fixture, oddsResp, leagueName) {
+    var bookmakers = oddsResp && oddsResp[0] && oddsResp[0].bookmakers || [];
+    var bm = bookmakers.find(function(b) { return b.id === 8; }); // 8 = bet365
+    var bmName = 'Bet365';
+    if (!bm) {
+      bm = bookmakers[0];
+      if (bm) bmName = bm.name || String(bm.id);
+    }
+    if (!bm) return null;
+    var matchWinner = (bm.bets || []).find(function(b) {
+      return b.id === 1 || b.name === 'Match Winner';
+    });
+    if (!matchWinner) return null;
+    var vals = matchWinner.values || [];
+    var home = vals.find(function(v) { return v.value === 'Home'; });
+    var draw = vals.find(function(v) { return v.value === 'Draw'; });
+    var away = vals.find(function(v) { return v.value === 'Away'; });
+    if (!home || !draw || !away) return null;
+    return {
+      id: 'apif_' + fixture.fixture.id,
+      leagueName: leagueName,
+      homeTeam: fixture.teams.home.name,
+      awayTeam: fixture.teams.away.name,
+      commenceTime: fixture.fixture.date,
+      homeOdds: parseFloat(home.odd),
+      drawOdds: parseFloat(draw.odd),
+      awayOdds: parseFloat(away.odd),
+      bookmaker: bmName,
+      source: 'api-football'
+    };
+  }
 
   /* ── Render helpers ── */
-  function oddsBtn(matchId, outcomeName, price, extraClass) {
+  function oddsBtn(matchId, outcomeName, price) {
     var disp = outcomeName === 'Draw' ? 'X' : outcomeName;
-    return '<button class="odds-btn' + (extraClass ? ' ' + extraClass : '') + '"' +
+    return '<button class="odds-btn"' +
       ' data-mid="' + esc(matchId) + '"' +
       ' data-outcome="' + esc(outcomeName) + '"' +
       ' data-odds="' + price + '">' +
@@ -498,155 +585,161 @@
 
   function renderCard(match) {
     matchStore[match.id] = match;
-    var bookmakers = match.bookmakers || [];
-
-    // Prefer bet365, fall back to any bookmaker with h2h market
-    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; });
-    var bookmakerLabel = null;
-    if (!bm) {
-      bm = bookmakers.find(function(b) {
-        return b.markets && b.markets.some(function(m) { return m.key === 'h2h'; });
-      });
-      if (bm) bookmakerLabel = bm.title || bm.key;
+    var h = typeof match.homeOdds === 'number' ? match.homeOdds.toFixed(2) : '–';
+    var d = typeof match.drawOdds === 'number' ? match.drawOdds.toFixed(2) : '–';
+    var a = typeof match.awayOdds === 'number' ? match.awayOdds.toFixed(2) : '–';
+    var footer = '';
+    if (match.source === 'api-football') {
+      var lbl = 'via API-Football';
+      if (match.bookmaker && match.bookmaker.toLowerCase() !== 'bet365') lbl += ' · ' + match.bookmaker;
+      footer = '<div class="match-bookmaker">' + esc(lbl) + '</div>';
+    } else if (match.bookmaker && match.bookmaker !== 'bet365') {
+      footer = '<div class="match-bookmaker">' + esc(match.bookmaker) + '</div>';
     }
-
-    var market = bm && bm.markets && bm.markets.find(function(m) { return m.key === 'h2h'; });
-    if (!market) return '';
-
-    var ocs = market.outcomes || [];
-    var home = ocs.find(function(o){ return o.name === match.home_team; }) || { name: match.home_team, price: '–' };
-    var away = ocs.find(function(o){ return o.name === match.away_team; }) || { name: match.away_team, price: '–' };
-    var draw = ocs.find(function(o){ return o.name === 'Draw'; }) || { name: 'Draw', price: '–' };
-
     return '<div class="match-card">' +
-      '<div class="match-time">' + esc(fmtDate(match.commence_time)) + '</div>' +
+      '<div class="match-time">' + esc(fmtDate(match.commenceTime)) + '</div>' +
       '<div class="match-odds-row">' +
-        oddsBtn(match.id, home.name, home.price, '') +
-        oddsBtn(match.id, 'Draw', draw.price, '') +
-        oddsBtn(match.id, away.name, away.price, '') +
-      '</div>' +
-      (bookmakerLabel ? '<div class="match-bookmaker">' + esc(bookmakerLabel) + '</div>' : '') +
+        oddsBtn(match.id, match.homeTeam, h) +
+        oddsBtn(match.id, 'Draw', d) +
+        oddsBtn(match.id, match.awayTeam, a) +
+      '</div>' + footer +
     '</div>';
   }
 
-  /* ── Render matches into the container from a flat array ── */
-  function renderMatches(allMatches) {
+  function renderMatches(matches) {
     var byLeague = {};
-    allMatches.forEach(function (m) {
-      var lg = m.sport_title || 'Ukendt liga';
+    matches.forEach(function(m) {
+      var lg = m.leagueName || 'Ukendt liga';
       if (!byLeague[lg]) byLeague[lg] = [];
       byLeague[lg].push(m);
     });
-
     var html = '';
-    Object.keys(byLeague).sort().forEach(function (league) {
-      var cards = byLeague[league].map(renderCard).filter(Boolean);
-      if (cards.length === 0) return;
+    Object.keys(byLeague).sort().forEach(function(lg) {
+      var cards = byLeague[lg].map(renderCard).filter(Boolean);
+      if (!cards.length) return;
       html += '<div class="league-section">' +
-        '<h2 class="league-header">' + esc(league) + '</h2>' +
+        '<h2 class="league-header">' + esc(lg) + '</h2>' +
         '<div class="match-list">' + cards.join('') + '</div>' +
         '</div>';
     });
-
     return html;
   }
 
-  /* ── Date range helpers ── */
-  function todayRange() {
-    var n = new Date();
-    var from = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 0, 0, 0)).toISOString();
-    var to   = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 23, 59, 59)).toISOString();
-    return { from: from, to: to };
-  }
-  function weekRange() {
-    var from = new Date().toISOString();
-    var to   = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    return { from: from, to: to };
-  }
-
-  /* ── Check which leagues have events in a time window (free endpoint) ── */
-  async function leaguesWithEvents(from, to) {
-    var checks = await Promise.all(
-      LEAGUES.map(function (league) {
+  /* ── API fetchers ── */
+  async function checkLeagueEvents(from, to) {
+    return Promise.all(
+      LEAGUES.map(function(league) {
         var url = 'https://api.the-odds-api.com/v4/sports/' + league +
-          '/events?apiKey=' + API_KEY +
+          '/events?apiKey=' + ODDS_API_KEY +
           '&commenceTimeFrom=' + encodeURIComponent(from) +
           '&commenceTimeTo='   + encodeURIComponent(to);
         return fetch(url)
-          .then(function (r) { return r.ok ? r.json() : []; })
-          .catch(function ()  { return []; })
-          .then(function (events) {
-            return Array.isArray(events) && events.length > 0 ? league : null;
+          .then(function(r) { return r.ok ? r.json() : []; })
+          .catch(function() { return []; })
+          .then(function(events) {
+            return { league: league, hasEvents: Array.isArray(events) && events.length > 0 };
           });
       })
     );
-    return checks.filter(Boolean);
   }
 
-  /* ── Fetch odds for a list of leagues ── */
-  async function fetchOdds(leagues) {
+  async function fetchOddsApi(leagues) {
     var responses = await Promise.all(
-      leagues.map(function (league) {
+      leagues.map(function(league) {
         var url = 'https://api.the-odds-api.com/v4/sports/' + league +
-          '/odds/?apiKey=' + API_KEY +
+          '/odds/?apiKey=' + ODDS_API_KEY +
           '&regions=eu&markets=h2h&oddsFormat=decimal';
         return fetch(url)
-          .then(function (r) {
+          .then(function(r) {
             var rem = r.headers.get('x-requests-remaining');
             if (rem !== null) setQuotaDisplay(rem);
             return r.ok ? r.json() : [];
           })
-          .catch(function () { return []; });
+          .catch(function() { return []; });
       })
     );
-    return responses.flat ? responses.flat() : [].concat.apply([], responses);
+    var flat = responses.flat ? responses.flat() : [].concat.apply([], responses);
+    return flat.map(normalizeOddsApiMatch).filter(Boolean);
   }
 
-  /* ── Main loader with caching and smart league detection ── */
+  async function fetchApiFootball(leagues, dateStr) {
+    var headers = { 'x-apisports-key': APIF_KEY };
+    var results = [];
+    var leaguePromises = leagues.map(function(league) {
+      var info = LEAGUE_MAP[league];
+      if (!info) return Promise.resolve([]);
+      return fetch(APIF_BASE + '/fixtures?league=' + info.apif + '&season=2025&date=' + dateStr, { headers: headers })
+        .then(function(r) { return r.ok ? r.json() : { response: [] }; })
+        .catch(function() { return { response: [] }; })
+        .then(function(data) {
+          var fixtures = (data.response || []).filter(function(f) {
+            return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
+          });
+          if (!fixtures.length) return [];
+          return Promise.all(
+            fixtures.map(function(f) {
+              return fetch(APIF_BASE + '/odds?fixture=' + f.fixture.id + '&bookmaker=8', { headers: headers })
+                .then(function(r) { return r.ok ? r.json() : { response: [] }; })
+                .catch(function() { return { response: [] }; })
+                .then(function(od) { return normalizeApifMatch(f, od.response || [], info.name); });
+            })
+          );
+        });
+    });
+    var perLeague = await Promise.all(leaguePromises);
+    perLeague.forEach(function(arr) {
+      if (Array.isArray(arr)) arr.forEach(function(m) { if (m) results.push(m); });
+    });
+    return results;
+  }
+
+  /* ── Main loader ── */
   async function loadOdds() {
     matchStore = {};
     var container = document.getElementById('matchesContainer');
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Henter kampe…</span></div>';
-
     try {
       var allMatches;
-
-      // Serve from cache if still fresh
       var cachedTime = parseInt(localStorage.getItem(CACHE_TIME_KEY) || '0', 10);
       var cachedData = localStorage.getItem(CACHE_KEY);
       if (cachedData && Date.now() - cachedTime < CACHE_TTL_MS) {
         allMatches = JSON.parse(cachedData);
         setQuotaDisplay('–');
       } else {
-        // Step 1: find leagues with events today (free — no quota cost)
+        // Step 1 — which leagues have events today? (free endpoint, no quota)
         var range = todayRange();
-        var active = await leaguesWithEvents(range.from, range.to);
+        var eventResults = await checkLeagueEvents(range.from, range.to);
+        var withEvents    = eventResults.filter(function(r) { return r.hasEvents;  }).map(function(r) { return r.league; });
+        var withoutEvents = eventResults.filter(function(r) { return !r.hasEvents; }).map(function(r) { return r.league; });
 
-        // Step 2: widen to 7 days if nothing is on today
-        if (active.length === 0) {
+        // Step 2 — widen to 7 days if nothing today
+        if (withEvents.length === 0) {
           range = weekRange();
-          active = await leaguesWithEvents(range.from, range.to);
+          var wk = await checkLeagueEvents(range.from, range.to);
+          withEvents    = wk.filter(function(r) { return r.hasEvents;  }).map(function(r) { return r.league; });
+          withoutEvents = wk.filter(function(r) { return !r.hasEvents; }).map(function(r) { return r.league; });
         }
 
-        // Step 3: fetch odds only for leagues that have matches
-        allMatches = active.length > 0 ? await fetchOdds(active) : [];
+        var dateStr = todayDateStr();
+        // Step 3 — fetch both sources in parallel
+        var oddsApiMatches = withEvents.length    > 0 ? await fetchOddsApi(withEvents)             : [];
+        var apifMatches    = withoutEvents.length > 0 ? await fetchApiFootball(withoutEvents, dateStr) : [];
+        allMatches = oddsApiMatches.concat(apifMatches);
 
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
       }
 
-      if (allMatches.length === 0) {
+      if (!allMatches.length) {
         container.innerHTML = '<div class="empty-state"><p>Ingen kampe tilgængelige</p></div>';
         return;
       }
-
       var html = renderMatches(allMatches);
       if (!html) {
         container.innerHTML = '<div class="empty-state"><p>Ingen kampe med odds tilgængelige</p></div>';
         return;
       }
       container.innerHTML = html;
-
     } catch (err) {
       container.innerHTML = '<div class="error-state">' +
         '<p>Kunne ikke hente kampe. Tjek forbindelsen og prøv igen.</p>' +
@@ -656,26 +749,18 @@
     }
   }
 
-  function setQuotaDisplay(value) {
-    var el = document.getElementById('apiQuota');
-    if (el) el.textContent = 'API-kald tilbage: ' + value;
-  }
-
   /* ── Bet slip ── */
   function openSlip(matchId, outcome, odds) {
     var match = matchStore[matchId];
     if (!match) return;
     current = { matchId: matchId, outcome: outcome, odds: parseFloat(odds) };
-
-    document.getElementById('slipMatchName').textContent = match.home_team + ' vs ' + match.away_team;
-    document.getElementById('slipLeague').textContent = match.sport_title || '';
-    document.getElementById('slipSelLabel').textContent = selectionLabel(outcome, match.home_team, match.away_team);
+    document.getElementById('slipMatchName').textContent = match.homeTeam + ' vs ' + match.awayTeam;
+    document.getElementById('slipLeague').textContent = match.leagueName || '';
+    document.getElementById('slipSelLabel').textContent = selectionLabel(outcome, match.homeTeam, match.awayTeam);
     document.getElementById('slipOddsBadge').textContent = parseFloat(odds).toFixed(2);
-
     var si = document.getElementById('stakeInput');
     si.value = '';
     document.getElementById('potentialWin').textContent = '0 kr';
-
     document.getElementById('betSlip').classList.add('open');
     document.getElementById('betSlip').setAttribute('aria-hidden', 'false');
     document.getElementById('slipBackdrop').classList.add('active');
@@ -694,89 +779,62 @@
     if (!current) return;
     var si = document.getElementById('stakeInput');
     var stake = parseFloat(si.value);
-
-    if (isNaN(stake) || stake < 10) {
-      triggerShake(si);
-      return;
-    }
-
+    if (isNaN(stake) || stake < 10) { triggerShake(si); return; }
     var balance = parseFloat(localStorage.getItem('nb_balance') || '0');
-    if (stake > balance) {
-      triggerShake(si);
-      return;
-    }
-
+    if (stake > balance) { triggerShake(si); return; }
     var match = matchStore[current.matchId];
     if (!match) return;
-
-    // Deduct balance
     localStorage.setItem('nb_balance', String(balance - stake));
     window.dispatchEvent(new Event('nb_balance_updated'));
-
-    // Store bet
     var bets = JSON.parse(localStorage.getItem('nb_bets') || '[]');
     bets.push({
       id: Date.now().toString(),
       matchId: current.matchId,
-      homeTeam: match.home_team,
-      awayTeam: match.away_team,
-      league: match.sport_title || '',
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      league: match.leagueName || '',
       selection: current.outcome,
       odds: current.odds,
       stake: stake,
       potentialWin: stake * current.odds,
       placedAt: new Date().toISOString(),
-      commenceTime: match.commence_time,
+      commenceTime: match.commenceTime,
       status: 'active'
     });
     localStorage.setItem('nb_bets', JSON.stringify(bets));
     window.dispatchEvent(new Event('nb_bets_updated'));
-
     closeSlip();
   }
 
   function triggerShake(el) {
     el.classList.remove('shake');
-    void el.offsetWidth; // reflow
+    void el.offsetWidth;
     el.classList.add('shake');
     el.addEventListener('animationend', function() { el.classList.remove('shake'); }, { once: true });
     el.focus();
   }
 
-  /* ── Event delegation on matches container ── */
-  document.getElementById('matchesContainer').addEventListener('click', function (e) {
+  /* ── Event delegation ── */
+  document.getElementById('matchesContainer').addEventListener('click', function(e) {
     var btn = e.target.closest('.odds-btn');
     if (!btn) return;
-
     document.querySelectorAll('.odds-btn.selected').forEach(function(b) { b.classList.remove('selected'); });
     btn.classList.add('selected');
-
-    openSlip(
-      btn.getAttribute('data-mid'),
-      btn.getAttribute('data-outcome'),
-      btn.getAttribute('data-odds')
-    );
+    openSlip(btn.getAttribute('data-mid'), btn.getAttribute('data-outcome'), btn.getAttribute('data-odds'));
   });
 
-  /* ── Stake input → potential win ── */
-  document.getElementById('stakeInput').addEventListener('input', function () {
+  document.getElementById('stakeInput').addEventListener('input', function() {
     var stake = parseFloat(this.value) || 0;
     var odds = current ? current.odds : 0;
     document.getElementById('potentialWin').textContent = stake > 0 && odds > 0 ? fmtKr(stake * odds) : '0 kr';
   });
 
-  /* ── Slip controls ── */
   document.getElementById('slipClose').addEventListener('click', closeSlip);
   document.getElementById('slipCancel').addEventListener('click', closeSlip);
   document.getElementById('slipBackdrop').addEventListener('click', closeSlip);
   document.getElementById('slipPlace').addEventListener('click', placeBet);
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeSlip(); });
 
-  /* ── Keyboard: Escape closes slip ── */
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeSlip();
-  });
-
-  /* ── Init ── */
   loadOdds();
 })();
 </script>
