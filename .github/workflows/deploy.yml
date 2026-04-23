@@ -19,7 +19,7 @@ jobs:
           server: ${{ secrets.SFTP_HOST }}
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
-          server_port: 22
-          local_path: ./dist/*
+          port: 22
+          local_path: ./dist/
           remote_path: /bets/
           sftp_only: true
