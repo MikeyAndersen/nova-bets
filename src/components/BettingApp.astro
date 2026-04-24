@@ -3,6 +3,23 @@
 ---
 
 <section id="bettingApp">
+  <!-- Active bets strip -->
+  <div id="activeBetsStrip" class="active-bets-strip" style="display:none">
+    <div class="strip-label">Aktive indsatser</div>
+    <div class="strip-scroll" id="stripScroll"></div>
+  </div>
+
+  <!-- Search bar -->
+  <div class="search-wrap">
+    <div class="search-inner">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="searchInput" class="search-input" placeholder="Søg efter hold eller liga..." autocomplete="off" spellcheck="false" />
+      <button class="search-clear" id="searchClear" style="display:none" aria-label="Ryd søgning">×</button>
+    </div>
+  </div>
+
   <div id="matchesContainer">
     <div class="loading-state">
       <div class="spinner"></div>
@@ -62,7 +79,7 @@
 </aside>
 
 <style is:global>
-  /* ── Shared loading / error / empty ── */
+  /* ── Loading / error / empty ── */
   .loading-state,
   .error-state,
   .empty-state {
@@ -76,10 +93,8 @@
     text-align: center;
     font-size: 0.95rem;
   }
-
   .spinner {
-    width: 30px;
-    height: 30px;
+    width: 30px; height: 30px;
     border: 3px solid rgba(255,255,255,0.08);
     border-top-color: var(--green);
     border-radius: 50%;
@@ -87,343 +102,259 @@
     flex-shrink: 0;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-
   .btn-retry {
-    background: var(--green);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 0.55rem 1.2rem;
-    font-size: 0.88rem;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: var(--font);
-    transition: background 0.18s;
+    background: var(--green); color: #fff; border: none;
+    border-radius: 8px; padding: 0.55rem 1.2rem;
+    font-size: 0.88rem; font-weight: 600; cursor: pointer;
+    font-family: var(--font); transition: background 0.15s ease;
   }
   .btn-retry:hover { background: #00784f; }
+  .api-quota { margin-top: 1.5rem; font-size: 0.7rem; color: rgba(255,255,255,0.15); text-align: right; }
 
-  .api-quota {
-    margin-top: 1.5rem;
-    font-size: 0.7rem;
-    color: rgba(255,255,255,0.2);
-    text-align: right;
+  /* ── Active bets strip ── */
+  .active-bets-strip { margin-bottom: 1.25rem; }
+  .strip-label {
+    font-size: 0.63rem; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--mint); margin-bottom: 0.55rem;
   }
+  .strip-scroll {
+    display: flex; gap: 0.6rem; overflow-x: auto;
+    padding-bottom: 0.4rem; scrollbar-width: none;
+  }
+  .strip-scroll::-webkit-scrollbar { display: none; }
+  .strip-card {
+    flex-shrink: 0; width: 200px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    border-radius: 10px; padding: 0.7rem 0.85rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .strip-match {
+    font-size: 0.79rem; font-weight: 600; color: var(--text);
+    margin-bottom: 0.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .strip-sel {
+    font-size: 0.77rem; color: var(--gold); font-weight: 600;
+    margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .strip-details { font-size: 0.74rem; color: var(--muted); margin-bottom: 0.12rem; }
+  .strip-win { color: var(--mint); font-weight: 600; }
+  .strip-league {
+    font-size: 0.63rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ── Search bar ── */
+  .search-wrap {
+    position: sticky; top: 58px; z-index: 50;
+    background: var(--dark);
+    padding: 0.65rem 0 0.75rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-inner { position: relative; display: flex; align-items: center; }
+  .search-icon {
+    position: absolute; left: 0.85rem;
+    color: var(--muted); pointer-events: none; flex-shrink: 0;
+  }
+  .search-input {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.68rem 2.4rem 0.68rem 2.5rem;
+    color: var(--text); font-size: 0.9rem; font-family: var(--font);
+    outline: none; transition: border-color 0.15s ease;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--mint); }
+  .search-clear {
+    position: absolute; right: 0.7rem;
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 1.15rem; line-height: 1;
+    padding: 0.2rem 0.3rem; border-radius: 4px;
+    transition: color 0.15s ease;
+  }
+  .search-clear:hover { color: var(--text); }
+  .search-no-results {
+    padding: 3rem 2rem; text-align: center;
+    color: var(--muted); font-size: 0.9rem;
+  }
+
+  /* ── Match container ── */
+  #matchesContainer { display: flex; flex-direction: column; gap: 0.5rem; }
 
   /* ── League sections ── */
-  #matchesContainer {
-    display: flex;
-    flex-direction: column;
-    gap: 2.25rem;
-  }
-
-  .league-section { }
-
   .league-header {
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--mint);
-    padding-bottom: 0.7rem;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 0.6rem;
+    width: 100%; display: flex; align-items: center; gap: 0.55rem;
+    background: none; border: none; border-bottom: 1px solid var(--border);
+    padding: 0.6rem 0; cursor: pointer; font-family: var(--font);
+    transition: opacity 0.15s ease;
   }
-
-  .match-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
+  .league-header:hover { opacity: 0.75; }
+  .league-name {
+    font-size: 0.67rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--mint); flex: 1; text-align: left;
   }
+  .league-count {
+    font-size: 0.67rem; font-weight: 700; color: var(--muted);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.08rem 0.48rem;
+    min-width: 1.5em; text-align: center;
+  }
+  .league-chevron {
+    color: var(--muted); transition: transform 0.2s ease; flex-shrink: 0;
+  }
+  .league-section.expanded .league-chevron { transform: rotate(180deg); }
+  .league-body { display: none; padding-top: 0.45rem; }
+  .league-section.expanded .league-body { display: block; }
+  .match-list { display: flex; flex-direction: column; gap: 0.4rem; padding-bottom: 0.65rem; }
 
   /* ── Match card ── */
   .match-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 0.9rem 1.1rem;
-    transition: border-color 0.18s;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   }
-  .match-card:hover { border-color: rgba(255,255,255,0.14); }
-
-  .match-time {
-    font-size: 0.72rem;
-    color: var(--muted);
-    margin-bottom: 0.65rem;
-    text-transform: capitalize;
+  .match-card:hover {
+    border-color: #4a5272;
+    transform: translateY(-1px);
+    box-shadow: 0 5px 18px rgba(0,0,0,0.4);
   }
-
-  .match-odds-row {
-    display: grid;
-    grid-template-columns: 1fr 72px 1fr;
-    gap: 0.45rem;
-    align-items: stretch;
+  .match-teams {
+    display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.3rem;
   }
+  .team-name {
+    font-size: 0.88rem; font-weight: 600; color: var(--text);
+    flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .team-name.away { text-align: right; }
+  .vs-sep { font-size: 0.7rem; color: var(--muted); font-weight: 500; flex-shrink: 0; }
+  .match-time { font-size: 0.71rem; color: var(--muted); margin-bottom: 0.7rem; text-transform: capitalize; }
+  .match-odds-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; }
+  .match-bookmaker { font-size: 0.63rem; color: rgba(255,255,255,0.2); text-align: right; margin-top: 0.4rem; }
 
   /* ── Odds buttons ── */
   .odds-btn {
-    background: rgba(0, 100, 66, 0.12);
-    border: 1px solid rgba(0, 100, 66, 0.28);
-    border-radius: 7px;
-    padding: 0.55rem 0.4rem;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.2rem;
-    min-width: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.5rem 0.35rem; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+    min-width: 0; transition: background 0.15s ease, border-color 0.15s ease;
   }
-  .odds-btn:hover {
-    background: rgba(0, 100, 66, 0.25);
-    border-color: rgba(0, 100, 66, 0.55);
-  }
-  .odds-btn.selected {
-    background: rgba(242, 199, 68, 0.12);
-    border-color: var(--gold);
-  }
-  .odds-btn.selected .odds-val { color: var(--gold); }
-
-  .match-bookmaker {
-    font-size: 0.65rem;
-    color: rgba(255,255,255,0.25);
-    text-align: right;
-    margin-top: 0.4rem;
-  }
-
-  .odds-name {
-    font-size: 0.72rem;
-    color: var(--muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-    text-align: center;
-    line-height: 1.2;
+  .odds-btn:hover { background: var(--green); border-color: var(--green); }
+  .odds-btn:hover .odds-label,
+  .odds-btn:hover .odds-val { color: #fff; }
+  .odds-btn.selected { background: var(--gold); border-color: var(--gold); }
+  .odds-btn.selected .odds-label,
+  .odds-btn.selected .odds-val { color: var(--dark); font-weight: 700; }
+  .odds-label {
+    font-size: 0.67rem; color: var(--muted); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    text-align: center; line-height: 1.2; transition: color 0.15s ease;
   }
   .odds-val {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1;
+    font-size: 0.94rem; font-weight: 700; color: var(--text);
+    line-height: 1; transition: color 0.15s ease;
   }
 
   /* ── Bet slip ── */
   .slip-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.55);
-    z-index: 200;
-    animation: fadeIn 0.2s ease;
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 200; animation: fadeIn 0.2s ease;
   }
   .slip-backdrop.active { display: block; }
-
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
   .bet-slip {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 340px;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
-    z-index: 201;
-    display: flex;
-    flex-direction: column;
+    position: fixed; top: 0; right: 0; bottom: 0; width: 340px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 201; display: flex; flex-direction: column;
     transform: translateX(100%);
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .bet-slip.open { transform: translateX(0); }
-
   .slip-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1.1rem 1.4rem;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
-  .slip-title {
-    font-size: 0.95rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-  }
+  .slip-title { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.02em; }
   .slip-close {
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    transition: color 0.15s;
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    padding: 0.25rem; border-radius: 4px; display: flex; align-items: center;
+    transition: color 0.15s ease;
   }
   .slip-close:hover { color: var(--text); }
-
   .slip-body {
-    flex: 1;
-    padding: 1.4rem;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 1.1rem;
+    flex: 1; padding: 1.4rem; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 1.1rem;
   }
-
-  .slip-match-name {
-    font-size: 0.95rem;
-    font-weight: 700;
-    line-height: 1.35;
-    color: var(--text);
-  }
+  .slip-match-name { font-size: 0.95rem; font-weight: 700; line-height: 1.35; color: var(--text); }
   .slip-league {
-    font-size: 0.72rem;
-    color: var(--mint);
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-top: -0.6rem;
+    font-size: 0.72rem; color: var(--mint); font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; margin-top: -0.6rem;
   }
-
   .slip-selection-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--surface2);
-    border-radius: 8px;
-    padding: 0.7rem 0.9rem;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface2); border-radius: 8px; padding: 0.7rem 0.9rem;
   }
-  .slip-sel-label {
-    font-size: 0.85rem;
-    color: var(--muted);
-  }
-  .slip-odds-badge {
-    font-size: 1.4rem;
-    font-weight: 800;
-    color: var(--gold);
-    letter-spacing: -0.02em;
-  }
-
-  .stake-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .stake-label {
-    font-size: 0.78rem;
-    color: var(--muted);
-    font-weight: 500;
-  }
-  .stake-wrap {
-    position: relative;
-  }
+  .slip-sel-label { font-size: 0.85rem; color: var(--muted); }
+  .slip-odds-badge { font-size: 1.4rem; font-weight: 800; color: var(--gold); letter-spacing: -0.02em; }
+  .stake-field { display: flex; flex-direction: column; gap: 0.4rem; }
+  .stake-label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+  .stake-wrap { position: relative; }
   .stake-input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.75rem 2.8rem 0.75rem 0.9rem;
-    color: var(--text);
-    font-size: 1.1rem;
-    font-weight: 600;
-    outline: none;
-    transition: border-color 0.18s;
-    font-family: var(--font);
-    -moz-appearance: textfield;
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.75rem 2.8rem 0.75rem 0.9rem;
+    color: var(--text); font-size: 1.1rem; font-weight: 600; outline: none;
+    transition: border-color 0.15s ease; font-family: var(--font); -moz-appearance: textfield;
   }
   .stake-input::-webkit-inner-spin-button,
   .stake-input::-webkit-outer-spin-button { -webkit-appearance: none; }
   .stake-input:focus { border-color: var(--green); }
-  .stake-input.shake {
-    animation: shake 0.38s ease;
-    border-color: #e05555 !important;
-  }
+  .stake-input.shake { animation: shake 0.38s ease; border-color: #e05555 !important; }
   @keyframes shake {
     0%,100% { transform: translateX(0); }
     20%,60%  { transform: translateX(-5px); }
     40%,80%  { transform: translateX(5px); }
   }
   .stake-kr {
-    position: absolute;
-    right: 0.85rem;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.82rem;
-    color: var(--muted);
-    pointer-events: none;
+    position: absolute; right: 0.85rem; top: 50%; transform: translateY(-50%);
+    font-size: 0.82rem; color: var(--muted); pointer-events: none;
   }
-
   .potential-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: var(--surface2);
-    border-radius: 8px;
-    padding: 0.7rem 0.9rem;
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface2); border-radius: 8px; padding: 0.7rem 0.9rem;
   }
   .potential-label { font-size: 0.82rem; color: var(--muted); }
-  .potential-val {
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--mint);
-  }
-
+  .potential-val { font-size: 1rem; font-weight: 700; color: var(--mint); }
   .slip-foot {
-    display: flex;
-    gap: 0.65rem;
-    padding: 1.1rem 1.4rem;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
+    display: flex; gap: 0.65rem; padding: 1.1rem 1.4rem;
+    border-top: 1px solid var(--border); flex-shrink: 0;
   }
   .btn-cancel {
-    flex: 1;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    border-radius: 8px;
-    padding: 0.72rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-family: var(--font);
-    transition: border-color 0.18s, color 0.18s;
+    flex: 1; background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 0.72rem; cursor: pointer; font-size: 0.9rem;
+    font-family: var(--font); transition: border-color 0.15s ease, color 0.15s ease;
   }
   .btn-cancel:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
-
   .btn-place {
-    flex: 2;
-    background: var(--green);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 0.72rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    font-family: var(--font);
-    transition: background 0.18s;
+    flex: 2; background: var(--green); color: #fff; border: none;
+    border-radius: 8px; padding: 0.72rem; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; font-family: var(--font);
+    transition: background 0.15s ease;
   }
   .btn-place:hover { background: #00784f; }
 
-  /* ── Mobile: bottom sheet ── */
+  /* ── Mobile ── */
   @media (max-width: 620px) {
     .bet-slip {
-      top: auto;
-      left: 0;
-      right: 0;
-      width: 100%;
-      height: 88vh;
-      border-left: none;
-      border-top: 1px solid var(--border);
-      border-radius: 16px 16px 0 0;
-      transform: translateY(100%);
+      top: auto; left: 0; right: 0; width: 100%; height: 88vh;
+      border-left: none; border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0; transform: translateY(100%);
     }
     .bet-slip.open { transform: translateY(0); }
-
-    .match-odds-row {
-      grid-template-columns: 1fr 64px 1fr;
-      gap: 0.35rem;
-    }
+    .match-odds-row { gap: 0.3rem; }
   }
 </style>
 
@@ -463,6 +394,7 @@
 
   var matchStore = {};
   var current = null;
+  var allMatchesData = [];
 
   /* ── Utilities ── */
   function fmtKr(n) {
@@ -592,13 +524,12 @@
   }
 
   /* ── Render helpers ── */
-  function oddsBtn(matchId, outcomeName, price) {
-    var disp = outcomeName === 'Draw' ? 'X' : outcomeName;
+  function oddsBtn(matchId, outcomeName, price, label) {
     return '<button class="odds-btn"' +
       ' data-mid="' + esc(matchId) + '"' +
       ' data-outcome="' + esc(outcomeName) + '"' +
       ' data-odds="' + price + '">' +
-      '<span class="odds-name">' + esc(disp) + '</span>' +
+      '<span class="odds-label">' + esc(label) + '</span>' +
       '<span class="odds-val">' + price + '</span>' +
       '</button>';
   }
@@ -609,17 +540,22 @@
     var d = typeof match.drawOdds === 'number' ? match.drawOdds.toFixed(2) : '–';
     var a = typeof match.awayOdds === 'number' ? match.awayOdds.toFixed(2) : '–';
     return '<div class="match-card">' +
+      '<div class="match-teams">' +
+        '<span class="team-name home">' + esc(match.homeTeam) + '</span>' +
+        '<span class="vs-sep">vs</span>' +
+        '<span class="team-name away">' + esc(match.awayTeam) + '</span>' +
+      '</div>' +
       '<div class="match-time">' + esc(fmtDate(match.commenceTime)) + '</div>' +
       '<div class="match-odds-row">' +
-        oddsBtn(match.id, match.homeTeam, h) +
-        oddsBtn(match.id, 'Draw', d) +
-        oddsBtn(match.id, match.awayTeam, a) +
+        oddsBtn(match.id, match.homeTeam, h, '1') +
+        oddsBtn(match.id, 'Draw', d, 'Uafgjort') +
+        oddsBtn(match.id, match.awayTeam, a, '2') +
       '</div>' +
       '<div class="match-bookmaker">' + esc(match.bookmaker) + '</div>' +
     '</div>';
   }
 
-  function renderMatches(matches) {
+  function renderMatches(matches, searching) {
     console.log('Render called with:', matches.length, 'matches');
     var byLeague = {};
     matches.forEach(function(m) {
@@ -627,19 +563,55 @@
       if (!byLeague[lg]) byLeague[lg] = [];
       byLeague[lg].push(m);
     });
+    var leagues = Object.keys(byLeague).sort();
     var html = '';
-    Object.keys(byLeague).sort().forEach(function(lg) {
+    leagues.forEach(function(lg, idx) {
       var sorted = byLeague[lg].slice().sort(function(a, b) {
         return new Date(a.commenceTime) - new Date(b.commenceTime);
       });
       var cards = sorted.map(renderCard).filter(Boolean);
       if (!cards.length) return;
-      html += '<div class="league-section">' +
-        '<h2 class="league-header">' + esc(lg) + '</h2>' +
-        '<div class="match-list">' + cards.join('') + '</div>' +
-        '</div>';
+      var expanded = searching || idx < 3;
+      html += '<div class="league-section' + (expanded ? ' expanded' : '') + '">' +
+        '<button class="league-header" aria-expanded="' + expanded + '">' +
+          '<span class="league-name">' + esc(lg) + '</span>' +
+          '<span class="league-count">' + cards.length + '</span>' +
+          '<svg class="league-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button>' +
+        '<div class="league-body"><div class="match-list">' + cards.join('') + '</div></div>' +
+      '</div>';
     });
     return html;
+  }
+
+  function displayMatches(matches, searching) {
+    var container = document.getElementById('matchesContainer');
+    if (!matches.length) {
+      container.innerHTML = '<div class="empty-state"><p>Ingen kampe tilgængelige i øjeblikket. Prøv igen senere.</p></div>';
+      return;
+    }
+    var html = renderMatches(matches, searching);
+    container.innerHTML = html || '<div class="empty-state"><p>Ingen kampe tilgængelige i øjeblikket. Prøv igen senere.</p></div>';
+  }
+
+  function renderActiveBetsStrip() {
+    var bets = JSON.parse(localStorage.getItem('nb_bets') || '[]');
+    var active = bets.filter(function(b) { return b.status === 'active'; });
+    var strip = document.getElementById('activeBetsStrip');
+    var scroll = document.getElementById('stripScroll');
+    if (!active.length) { strip.style.display = 'none'; return; }
+    strip.style.display = '';
+    scroll.innerHTML = active.map(function(b) {
+      var sel = b.selection === 'Draw' ? 'Uafgjort'
+        : b.selection === b.homeTeam ? b.homeTeam + ' vinder'
+        : b.awayTeam + ' vinder';
+      return '<div class="strip-card">' +
+        '<div class="strip-match">' + esc(b.homeTeam) + ' vs ' + esc(b.awayTeam) + '</div>' +
+        '<div class="strip-sel">' + esc(sel) + '</div>' +
+        '<div class="strip-details">' + fmtKr(b.stake) + ' → <span class="strip-win">' + fmtKr(b.potentialWin) + '</span></div>' +
+        '<div class="strip-league">' + esc(b.league || '') + '</div>' +
+      '</div>';
+    }).join('');
   }
 
   /* ── Main loader ── */
@@ -671,16 +643,9 @@
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
       }
 
-      if (!allMatches.length) {
-        container.innerHTML = '<div class="empty-state"><p>Ingen kampe tilgængelige i øjeblikket. Prøv igen senere.</p></div>';
-        return;
-      }
-      var html = renderMatches(allMatches);
-      if (!html) {
-        container.innerHTML = '<div class="empty-state"><p>Ingen kampe tilgængelige i øjeblikket. Prøv igen senere.</p></div>';
-        return;
-      }
-      container.innerHTML = html;
+      allMatchesData = allMatches;
+      renderActiveBetsStrip();
+      displayMatches(allMatches, false);
     } catch (err) {
       container.innerHTML = '<div class="error-state">' +
         '<p>Kunne ikke hente kampe. Tjek forbindelsen og prøv igen.</p>' +
@@ -775,6 +740,48 @@
   document.getElementById('slipBackdrop').addEventListener('click', closeSlip);
   document.getElementById('slipPlace').addEventListener('click', placeBet);
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeSlip(); });
+
+  /* ── Search ── */
+  var searchInput = document.getElementById('searchInput');
+  var searchClear = document.getElementById('searchClear');
+
+  searchInput.addEventListener('input', function() {
+    var q = this.value.trim();
+    searchClear.style.display = q ? '' : 'none';
+    if (!q) { displayMatches(allMatchesData, false); return; }
+    var lower = q.toLowerCase();
+    var filtered = allMatchesData.filter(function(m) {
+      return m.homeTeam.toLowerCase().indexOf(lower) !== -1 ||
+             m.awayTeam.toLowerCase().indexOf(lower) !== -1 ||
+             (m.leagueName || '').toLowerCase().indexOf(lower) !== -1;
+    });
+    if (!filtered.length) {
+      document.getElementById('matchesContainer').innerHTML =
+        '<div class="search-no-results">Ingen resultater for \'' + esc(q) + '\'</div>';
+      return;
+    }
+    displayMatches(filtered, true);
+  });
+
+  searchClear.addEventListener('click', function() {
+    searchInput.value = '';
+    searchClear.style.display = 'none';
+    displayMatches(allMatchesData, false);
+    searchInput.focus();
+  });
+
+  /* ── League collapse/expand ── */
+  document.getElementById('matchesContainer').addEventListener('click', function(e) {
+    var hdr = e.target.closest('.league-header');
+    if (!hdr) return;
+    var section = hdr.closest('.league-section');
+    if (!section) return;
+    var expanded = section.classList.toggle('expanded');
+    hdr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  });
+
+  /* ── Refresh strip when bets change ── */
+  window.addEventListener('nb_bets_updated', renderActiveBetsStrip);
 
   loadOdds();
 })();

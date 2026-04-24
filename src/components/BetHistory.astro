@@ -83,9 +83,15 @@
   .bet-card {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
     border-radius: 10px;
     padding: 0.9rem 1.1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
+  .bet-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+  .bet-card.bet-won  { border-left-color: var(--mint); }
+  .bet-card.bet-lost { border-left-color: #e05555; }
 
   .bet-top {
     display: flex;
@@ -209,7 +215,8 @@
       badge = 'badge-active'; badgeText = 'Aktiv';
     }
 
-    return '<div class="bet-card">' +
+    var cardExtra = bet.status === 'won' ? ' bet-won' : bet.status === 'lost' ? ' bet-lost' : '';
+    return '<div class="bet-card' + cardExtra + '">' +
       '<div class="bet-top">' +
         '<div>' +
           '<div class="bet-match">' + esc(bet.homeTeam) + ' vs ' + esc(bet.awayTeam) + '</div>' +
