@@ -579,6 +579,8 @@
 
   /* ── Main loader ── */
   async function loadOdds() {
+    localStorage.removeItem('nb_odds_cache');
+    localStorage.removeItem('nb_odds_cache_time');
     matchStore = {};
     var container = document.getElementById('matchesContainer');
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Henter kampe…</span></div>';
