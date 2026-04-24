@@ -378,7 +378,10 @@
     'soccer_scotland_premiership'
   ];
 
-  var ODDS_API_KEY    = '3a9a2207c105619994c376d25f8b34ed';
+  var ODDS_API_KEYS   = [
+    '3a9a2207c105619994c376d25f8b34ed',
+    'c2be06815c1270ef08b60c8b7d72111d'
+  ];
   var ODDS_API_IO_KEY = 'c9261af1065824f587395be2eb5865f2d73eeb66aa56bbde05b859a31f64990a';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
@@ -410,17 +413,22 @@
     return awayTeam + ' vinder';
   }
 
-  /* ── Fetch from The Odds API (sequential to avoid rate limits) ── */
+  /* ── Fetch from The Odds API — tries each key in order, falls back on 401/429 ── */
   async function fetchAllOdds() {
     var matches = [];
     for (var i = 0; i < LEAGUES.length; i++) {
       if (i > 0) await new Promise(function(r) { setTimeout(r, 150); });
-      var result = await fetch(
-        'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
-        '/odds/?apiKey=' + ODDS_API_KEY +
-        '&regions=eu&markets=h2h&oddsFormat=decimal'
-      ).then(function(r) { return r.ok ? r.json() : []; })
-       .catch(function() { return []; });
+      var result = [];
+      for (var k = 0; k < ODDS_API_KEYS.length; k++) {
+        var res = await fetch(
+          'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
+          '/odds/?apiKey=' + ODDS_API_KEYS[k] +
+          '&regions=eu&markets=h2h&oddsFormat=decimal'
+        ).catch(function() { return { ok: false, status: 0 }; });
+        if (res.ok) { result = await res.json(); break; }
+        if (res.status !== 401 && res.status !== 429) break; // unexpected error, don't retry
+        console.log('Key', k, 'failed (' + res.status + ') for', LEAGUES[i] + ', trying next key');
+      }
       if (Array.isArray(result)) matches = matches.concat(result);
     }
     console.log('Total matches loaded:', matches.length);
