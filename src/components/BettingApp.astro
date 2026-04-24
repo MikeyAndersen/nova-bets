@@ -641,14 +641,19 @@
 
     var cachedTime = parseInt(localStorage.getItem(CACHE_TIME_KEY) || '0', 10);
     var cachedData = localStorage.getItem(CACHE_KEY);
-    var cacheValid = cachedData && Date.now() - cachedTime < CACHE_TTL_MS;
 
-    if (cacheValid) {
-      var allMatches = JSON.parse(cachedData);
-      allMatchesData = allMatches;
-      renderActiveBetsStrip();
-      displayMatches(allMatches, false);
-      return;
+    if (cachedData && Date.now() - cachedTime < CACHE_TTL_MS) {
+      try {
+        var cached = JSON.parse(cachedData);
+        if (cached.length > 0) {
+          console.log('Serving from cache:', cached.length, 'matches');
+          allMatchesData = cached;
+          renderActiveBetsStrip();
+          displayMatches(cached, false);
+          return;
+        }
+      } catch (e) {}
+      // cached empty or invalid — fall through to fresh fetch
     }
 
     try {
