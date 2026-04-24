@@ -492,7 +492,7 @@
         return fetch(
           'https://api.the-odds-api.com/v4/sports/' + key +
           '/odds/?apiKey=' + ODDS_API_KEY +
-          '&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal'
+          '&regions=eu&markets=h2h&oddsFormat=decimal'
         )
           .then(function(r) { return r.ok ? r.json() : []; })
           .catch(function() { return []; });
@@ -505,25 +505,16 @@
 
   /* ── Normalise a raw Odds API match object ── */
   function normalizeMatch(match) {
-    var bookmakerKeys = (match.bookmakers || []).map(function(b) { return b.key; });
-    var bm = (match.bookmakers || []).find(function(b) { return b.key === 'bet365'; });
-    if (!bm) {
-      console.log('No bet365 for', match.home_team, 'vs', match.away_team, '— bookmakers:', bookmakerKeys);
-      return null;
-    }
+    var bookmakers = match.bookmakers || [];
+    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; }) || bookmakers[0];
+    if (!bm) return null;
     var market = (bm.markets || []).find(function(m) { return m.key === 'h2h'; });
-    if (!market) {
-      console.log('No h2h market for', match.home_team, 'vs', match.away_team);
-      return null;
-    }
+    if (!market) return null;
     var outcomes = market.outcomes || [];
     var homeOutcome = outcomes.find(function(o) { return o.name === match.home_team; });
     var awayOutcome = outcomes.find(function(o) { return o.name === match.away_team; });
     var drawOutcome = outcomes.find(function(o) { return o.name === 'Draw'; });
-    if (!homeOutcome || !awayOutcome) {
-      console.log('Missing home/away outcome for', match.home_team, 'vs', match.away_team, '— outcomes:', outcomes.map(function(o) { return o.name; }));
-      return null;
-    }
+    if (!homeOutcome || !awayOutcome) return null;
     return {
       id: match.id,
       leagueName: match.sport_title,
@@ -533,7 +524,7 @@
       homeOdds: homeOutcome.price,
       drawOdds: drawOutcome ? drawOutcome.price : null,
       awayOdds: awayOutcome.price,
-      bookmaker: 'bet365'
+      bookmaker: bm.title || bm.key
     };
   }
 
@@ -561,7 +552,7 @@
         oddsBtn(match.id, 'Draw', d) +
         oddsBtn(match.id, match.awayTeam, a) +
       '</div>' +
-      '<div class="match-bookmaker">bet365</div>' +
+      '<div class="match-bookmaker">' + esc(match.bookmaker) + '</div>' +
     '</div>';
   }
 
