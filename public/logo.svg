@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background disc -->
+  <circle cx="50" cy="50" r="49" fill="#1a1f2e"/>
+  <circle cx="50" cy="50" r="47" fill="none" stroke="#F2C744" stroke-width="2.5"/>
+
+  <!-- Floppy ears -->
+  <ellipse cx="17" cy="43" rx="11" ry="17" fill="#B8791A" transform="rotate(-18 17 43)"/>
+  <ellipse cx="83" cy="43" rx="11" ry="17" fill="#B8791A" transform="rotate(18 83 43)"/>
+
+  <!-- Head -->
+  <ellipse cx="50" cy="50" rx="28" ry="26" fill="#D4912A"/>
+
+  <!-- Muzzle flash (lighter – classic boxer coloring) -->
+  <ellipse cx="50" cy="60" rx="17" ry="12" fill="#EAB050"/>
+
+  <!-- Brow wrinkles (boxer trademark) -->
+  <path d="M33 37 Q38 33 42 37" stroke="#A07020" fill="none" stroke-width="2" stroke-linecap="round"/>
+  <path d="M58 37 Q62 33 67 37" stroke="#A07020" fill="none" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Eyes -->
+  <circle cx="37" cy="45" r="7.5" fill="#F5EFE0"/>
+  <circle cx="63" cy="45" r="7.5" fill="#F5EFE0"/>
+  <circle cx="38" cy="46" r="5" fill="#241000"/>
+  <circle cx="64" cy="46" r="5" fill="#241000"/>
+  <circle cx="36" cy="43.5" r="1.8" fill="white"/>
+  <circle cx="62" cy="43.5" r="1.8" fill="white"/>
+
+  <!-- Nose (wide, flat – boxer-style) -->
+  <ellipse cx="50" cy="57" rx="8" ry="5.5" fill="#1A0800"/>
+  <ellipse cx="47.5" cy="55.5" rx="2" ry="1.4" fill="#2D1400" opacity="0.4"/>
+  <ellipse cx="52.5" cy="55.5" rx="2" ry="1.4" fill="#2D1400" opacity="0.4"/>
+
+  <!-- Mouth line -->
+  <path d="M36 66 Q50 73 64 66" stroke="#90651A" fill="none" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Lower jaw / underbite bump -->
+  <ellipse cx="50" cy="68" rx="9" ry="4" fill="#EAB050"/>
+
+  <!-- Underbite teeth (2 showing – very boxer) -->
+  <rect x="44" y="66" width="4" height="5" rx="1.2" fill="#F9F6EE"/>
+  <rect x="52" y="66" width="4" height="5" rx="1.2" fill="#F9F6EE"/>
+
+  <!-- Playing card tucked in corner of mouth -->
+  <g transform="translate(68, 60) rotate(15)">
+    <!-- shadow -->
+    <rect x="1.5" y="1.5" width="18" height="24" rx="2" fill="#00000030"/>
+    <!-- card body -->
+    <rect x="0" y="0" width="18" height="24" rx="2" fill="#FEFEFE"/>
+    <rect x="0" y="0" width="18" height="24" rx="2" fill="none" stroke="#DDD" stroke-width="0.7"/>
+    <!-- Ace of hearts, top-left -->
+    <text x="3" y="12" font-size="11" fill="#C60C30" font-family="Georgia,serif" font-weight="bold">A</text>
+    <text x="4" y="22" font-size="9" fill="#C60C30" font-family="serif">♥</text>
+    <!-- mirrored bottom-right (like a real card) -->
+    <g transform="translate(18,24) rotate(180)">
+      <text x="3" y="11" font-size="7" fill="#C60C30" font-family="Georgia,serif" font-weight="bold">A</text>
+      <text x="3.5" y="19" font-size="6" fill="#C60C30" font-family="serif">♥</text>
+    </g>
+  </g>
+</svg>
