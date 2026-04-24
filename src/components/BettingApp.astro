@@ -362,15 +362,9 @@
 (function () {
   var LEAGUES = [
     'soccer_epl',
-    'soccer_efl_champ',
     'soccer_england_league1',
-    'soccer_uefa_champs_league',
-    'soccer_uefa_europa_league',
-    'soccer_uefa_europa_conference_league',
     'soccer_germany_bundesliga',
     'soccer_germany_bundesliga2',
-    'soccer_spain_la_liga',
-    'soccer_spain_segunda_division',
     'soccer_italy_serie_a',
     'soccer_italy_serie_b',
     'soccer_france_ligue_one',
@@ -381,16 +375,14 @@
     'soccer_turkey_super_league',
     'soccer_norway_eliteserien',
     'soccer_sweden_allsvenskan',
-    'soccer_scotland_premiership',
-    'soccer_spl',
-    'soccer_fifa_world_cup'
+    'soccer_scotland_premiership'
   ];
 
   var ODDS_API_KEY    = '3a9a2207c105619994c376d25f8b34ed';
   var ODDS_API_IO_KEY = 'c9261af1065824f587395be2eb5865f2d73eeb66aa56bbde05b859a31f64990a';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
-  var CACHE_TTL_MS   = 1 * 60 * 1000;
+  var CACHE_TTL_MS   = 30 * 60 * 1000;
 
   var matchStore = {};
   var current = null;
@@ -418,20 +410,19 @@
     return awayTeam + ' vinder';
   }
 
-  /* ── Fetch from The Odds API ── */
+  /* ── Fetch from The Odds API (sequential to avoid rate limits) ── */
   async function fetchAllOdds() {
-    var results = await Promise.all(
-      LEAGUES.map(function(key) {
-        return fetch(
-          'https://api.the-odds-api.com/v4/sports/' + key +
-          '/odds/?apiKey=' + ODDS_API_KEY +
-          '&regions=eu&markets=h2h&oddsFormat=decimal'
-        )
-          .then(function(r) { return r.ok ? r.json() : []; })
-          .catch(function() { return []; });
-      })
-    );
-    var matches = results.flat();
+    var matches = [];
+    for (var i = 0; i < LEAGUES.length; i++) {
+      if (i > 0) await new Promise(function(r) { setTimeout(r, 150); });
+      var result = await fetch(
+        'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
+        '/odds/?apiKey=' + ODDS_API_KEY +
+        '&regions=eu&markets=h2h&oddsFormat=decimal'
+      ).then(function(r) { return r.ok ? r.json() : []; })
+       .catch(function() { return []; });
+      if (Array.isArray(result)) matches = matches.concat(result);
+    }
     console.log('Total matches loaded:', matches.length);
     return matches;
   }
@@ -644,29 +635,35 @@
 
   /* ── Main loader ── */
   async function loadOdds() {
-    localStorage.removeItem('nb_odds_cache');
-    localStorage.removeItem('nb_odds_cache_time');
     matchStore = {};
     var container = document.getElementById('matchesContainer');
     container.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Henter kampe…</span></div>';
+
+    var cachedTime = parseInt(localStorage.getItem(CACHE_TIME_KEY) || '0', 10);
+    var cachedData = localStorage.getItem(CACHE_KEY);
+    var cacheValid = cachedData && Date.now() - cachedTime < CACHE_TTL_MS;
+
+    if (cacheValid) {
+      var allMatches = JSON.parse(cachedData);
+      allMatchesData = allMatches;
+      renderActiveBetsStrip();
+      displayMatches(allMatches, false);
+      return;
+    }
+
     try {
-      var allMatches;
-      var cachedTime = parseInt(localStorage.getItem(CACHE_TIME_KEY) || '0', 10);
-      var cachedData = localStorage.getItem(CACHE_KEY);
-      if (cachedData && Date.now() - cachedTime < CACHE_TTL_MS) {
-        allMatches = JSON.parse(cachedData);
-      } else {
-        var fetched = await Promise.all([fetchOddsApiIo(), fetchAllOdds()]);
-        var bet365Matches = fetched[0];
-        var oddsApiMatches = fetched[1].map(normalizeMatch).filter(Boolean);
+      var fetched = await Promise.all([fetchOddsApiIo(), fetchAllOdds()]);
+      var bet365Matches = fetched[0];
+      var oddsApiMatches = fetched[1].map(normalizeMatch).filter(Boolean);
 
-        // deduplicate: skip Odds API matches already covered by Bet365
-        var seen = {};
-        bet365Matches.forEach(function(m) { seen[m.homeTeam + '|' + m.awayTeam] = true; });
-        var extras = oddsApiMatches.filter(function(m) { return !seen[m.homeTeam + '|' + m.awayTeam]; });
+      var seen = {};
+      bet365Matches.forEach(function(m) { seen[m.homeTeam + '|' + m.awayTeam] = true; });
+      var extras = oddsApiMatches.filter(function(m) { return !seen[m.homeTeam + '|' + m.awayTeam]; });
 
-        allMatches = bet365Matches.concat(extras);
-        console.log('Normalised matches:', allMatches.length, JSON.stringify(allMatches[0]));
+      var allMatches = bet365Matches.concat(extras);
+      console.log('Normalised matches:', allMatches.length, JSON.stringify(allMatches[0]));
+
+      if (allMatches.length) {
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
       }
@@ -675,6 +672,14 @@
       renderActiveBetsStrip();
       displayMatches(allMatches, false);
     } catch (err) {
+      // If fresh fetch fails, try stale cache rather than showing nothing
+      if (cachedData) {
+        var stale = JSON.parse(cachedData);
+        allMatchesData = stale;
+        renderActiveBetsStrip();
+        displayMatches(stale, false);
+        return;
+      }
       container.innerHTML = '<div class="error-state">' +
         '<p>Kunne ikke hente kampe. Tjek forbindelsen og prøv igen.</p>' +
         '<button class="btn-retry" id="btnRetry">Prøv igen</button>' +
