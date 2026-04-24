@@ -436,31 +436,47 @@
     return matches;
   }
 
-  /* ── Fetch from odds-api.io — returns Bet365 normalised matches ── */
+  /* ── Fetch from odds-api.io — prefers Bet365, falls back to first available ── */
   async function fetchOddsApiIo() {
-    var eventsResp = await fetch(
-      'https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY +
-      '&sport=football&status=pending&limit=100'
-    ).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+    // Bookmakers and events in parallel
+    var parallel = await Promise.all([
+      fetch('https://api.odds-api.io/v3/bookmakers?apiKey=' + ODDS_API_IO_KEY)
+        .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY + '&sport=football&status=pending&limit=100')
+        .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+    ]);
 
-    var events = Array.isArray(eventsResp) ? eventsResp
-      : (eventsResp && Array.isArray(eventsResp.data) ? eventsResp.data : []);
+    var bmRaw  = parallel[0];
+    var evRaw  = parallel[1];
 
-    if (!events.length) return [];
+    var bmList = Array.isArray(bmRaw) ? bmRaw : (bmRaw && Array.isArray(bmRaw.data) ? bmRaw.data : []);
+    var events = Array.isArray(evRaw) ? evRaw : (evRaw && Array.isArray(evRaw.data) ? evRaw.data : []);
 
+    console.log('odds-api.io bookmakers:', bmList.map(function(b) { return b.name || b.key || b.slug; }));
     console.log('odds-api.io events fetched:', events.length);
 
+    if (!bmList.length || !events.length) return [];
+
+    // Pick Bet365 by name, or fall back to first bookmaker
+    var bet365 = bmList.find(function(b) {
+      return (b.name || b.key || b.slug || '').toLowerCase().indexOf('bet365') !== -1;
+    });
+    var chosenBm = bet365
+      ? (bet365.name || bet365.key || bet365.slug)
+      : (bmList[0].name || bmList[0].key || bmList[0].slug);
+
+    console.log('odds-api.io using bookmaker:', chosenBm);
+
+    // Batch odds in groups of 10
     var chunks = [];
-    for (var i = 0; i < events.length; i += 10) {
-      chunks.push(events.slice(i, i + 10));
-    }
+    for (var i = 0; i < events.length; i += 10) chunks.push(events.slice(i, i + 10));
 
     var oddsResults = await Promise.all(
       chunks.map(function(chunk) {
         var ids = chunk.map(function(e) { return e.id; }).join(',');
         return fetch(
           'https://api.odds-api.io/v3/odds/multi?apiKey=' + ODDS_API_IO_KEY +
-          '&eventIds=' + ids
+          '&eventIds=' + ids + '&bookmakers=' + encodeURIComponent(chosenBm)
         ).then(function(r) {
           if (!r.ok) { console.log('odds/multi error:', r.status); return []; }
           return r.json();
@@ -468,16 +484,15 @@
       })
     );
 
-    if (oddsResults.length) {
-      var firstResult = oddsResults[0];
-      console.log('odds-api.io raw odds sample:', JSON.stringify(Array.isArray(firstResult) ? firstResult[0] : firstResult).slice(0, 400));
-    }
-
     var oddsArr = [];
     oddsResults.forEach(function(r) {
       if (Array.isArray(r)) r.forEach(function(x) { oddsArr.push(x); });
       else if (r && Array.isArray(r.data)) r.data.forEach(function(x) { oddsArr.push(x); });
     });
+
+    if (oddsArr.length) {
+      console.log('odds-api.io raw odds sample:', JSON.stringify(oddsArr[0]).slice(0, 500));
+    }
 
     var oddsMap = {};
     oddsArr.forEach(function(item) {
@@ -487,8 +502,11 @@
     var matches = [];
     events.forEach(function(event) {
       var odds = oddsMap[String(event.id)];
-      if (!odds || !odds.bookmakers || !odds.bookmakers['Bet365']) return;
-      var ml = (odds.bookmakers['Bet365'] || []).find(function(m) { return m.name === 'ML'; });
+      if (!odds || !odds.bookmakers) return;
+      var bmData = odds.bookmakers[chosenBm] || odds.bookmakers[Object.keys(odds.bookmakers)[0]];
+      var actualBm = odds.bookmakers[chosenBm] ? chosenBm : Object.keys(odds.bookmakers)[0];
+      if (!bmData) return;
+      var ml = bmData.find ? bmData.find(function(m) { return m.name === 'ML'; }) : null;
       if (!ml || !ml.odds || !ml.odds[0]) return;
       var o = ml.odds[0];
       if (!o.home || !o.away) return;
@@ -501,10 +519,10 @@
         homeOdds: parseFloat(o.home),
         drawOdds: o.draw ? parseFloat(o.draw) : null,
         awayOdds: parseFloat(o.away),
-        bookmaker: 'Bet365'
+        bookmaker: actualBm
       });
     });
-    console.log('odds-api.io Bet365 matches:', matches.length);
+    console.log('odds-api.io matches found:', matches.length);
     return matches;
   }
 
