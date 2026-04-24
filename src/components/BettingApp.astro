@@ -472,13 +472,7 @@
       String(n.getUTCMonth() + 1).padStart(2, '0') + '-' +
       String(n.getUTCDate()).padStart(2, '0');
   }
-  function futureDateStr(daysAhead) {
-    var n = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
-    return n.getUTCFullYear() + '-' +
-      String(n.getUTCMonth() + 1).padStart(2, '0') + '-' +
-      String(n.getUTCDate()).padStart(2, '0');
-  }
-  function selectionLabel(outcome, homeTeam, awayTeam) {
+function selectionLabel(outcome, homeTeam, awayTeam) {
     if (outcome === 'Draw') return 'Uafgjort';
     if (outcome === homeTeam) return homeTeam + ' vinder';
     return awayTeam + ' vinder';
@@ -513,18 +507,22 @@
   }
 
   /* ── Step 1: Fetch fixtures for all leagues in parallel ── */
-  async function fetchFixtures(dateParam, season) {
-    var headers = { 'x-apisports-key': APIF_KEY };
+  async function fetchFixtures(today) {
     var results = await Promise.all(
       LEAGUES.map(function(leagueId) {
-        var url = APIF_BASE + '/fixtures?league=' + leagueId + '&season=' + season + '&' + dateParam;
-        return fetch(PROXY + url, { headers: headers })
-          .then(function(r) { return r.json(); })
-          .catch(function() { return { response: [] }; })
-          .then(function(r) {
-            console.log('Fixtures response for league', leagueId, JSON.stringify(r).slice(0, 300));
-            return r;
-          });
+        function tryFetch(season) {
+          var inner = APIF_BASE + '/fixtures?league=' + leagueId + '&season=' + season + '&date=' + today + '&token=' + APIF_KEY;
+          return fetch(PROXY + encodeURIComponent(inner))
+            .then(function(r) { return r.json(); })
+            .catch(function() { return { response: [] }; })
+            .then(function(r) {
+              console.log('Fixtures response for league', leagueId, JSON.stringify(r).slice(0, 300));
+              if (r.response && r.response.length > 0) return r;
+              if (season === 2025) return tryFetch(2024);
+              return r;
+            });
+        }
+        return tryFetch(2025);
       })
     );
     var all = [];
@@ -536,20 +534,18 @@
 
   /* ── Steps 2+3: Fetch odds for each fixture and normalise ── */
   async function fetchOddsForFixtures(fixtures) {
-    var headers = { 'x-apisports-key': APIF_KEY };
     var results = await Promise.all(
       fixtures.slice(0, 20).map(function(f) {
         var leagueId = f.league && f.league.id;
         var leagueName = LEAGUE_NAMES[leagueId] || (f.league && f.league.name) || 'Ukendt liga';
         var fixtureId = f.fixture.id;
-        var url = APIF_BASE + '/odds?fixture=' + fixtureId + '&bookmaker=8';
-        return fetch(PROXY + url, { headers: headers })
+        var inner = APIF_BASE + '/odds?fixture=' + fixtureId + '&bookmaker=8&token=' + APIF_KEY;
+        return fetch(PROXY + encodeURIComponent(inner))
           .then(function(r) { return r.json(); })
           .catch(function() { return { response: [] }; })
           .then(function(od) {
             console.log('Odds response for fixture', fixtureId, JSON.stringify(od).slice(0, 300));
-            var match = normalizeApifMatch(f, od.response || [], leagueName);
-            return match;
+            return normalizeApifMatch(f, od.response || [], leagueName);
           });
       })
     );
@@ -620,34 +616,14 @@
       } else {
         var today = todayDateStr();
 
-        // Step 1 — today's NS fixtures across all leagues (season 2025)
-        var allFixtures = await fetchFixtures('date=' + today, 2025);
+        // Step 1 — today's NS fixtures, per-league 2025→2024 season fallback
+        var allFixtures = await fetchFixtures(today);
         var fixtures = allFixtures.filter(function(f) {
           return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
         });
 
-        // Season fallback — retry with 2024 if 2025 returned nothing
-        if (!fixtures.length) {
-          console.log('No fixtures for season 2025, retrying with 2024');
-          allFixtures = await fetchFixtures('date=' + today, 2024);
-          fixtures = allFixtures.filter(function(f) {
-            return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
-          });
-        }
-
         console.log('Total fixtures found:', fixtures.length);
         console.log('Sample fixture:', JSON.stringify(fixtures[0]));
-
-        // Date-range fallback — widen to next 7 days, no NS filter
-        if (!fixtures.length) {
-          console.log('No NS fixtures today, widening to 7 days');
-          fixtures = await fetchFixtures('from=' + today + '&to=' + futureDateStr(7), 2025);
-          if (!fixtures.length) {
-            fixtures = await fetchFixtures('from=' + today + '&to=' + futureDateStr(7), 2024);
-          }
-          console.log('Total fixtures found (7-day fallback):', fixtures.length);
-        }
-
         console.log('Rendering matches:', fixtures.length);
 
         // Steps 2+3 — odds + normalise (capped at 20 fixtures)
