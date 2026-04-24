@@ -448,6 +448,8 @@
 
     if (!events.length) return [];
 
+    console.log('odds-api.io events fetched:', events.length);
+
     var chunks = [];
     for (var i = 0; i < events.length; i += 10) {
       chunks.push(events.slice(i, i + 10));
@@ -458,10 +460,18 @@
         var ids = chunk.map(function(e) { return e.id; }).join(',');
         return fetch(
           'https://api.odds-api.io/v3/odds/multi?apiKey=' + ODDS_API_IO_KEY +
-          '&eventIds=' + ids + '&bookmakers=Bet365'
-        ).then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; });
+          '&eventIds=' + ids
+        ).then(function(r) {
+          if (!r.ok) { console.log('odds/multi error:', r.status); return []; }
+          return r.json();
+        }).catch(function() { return []; });
       })
     );
+
+    if (oddsResults.length) {
+      var firstResult = oddsResults[0];
+      console.log('odds-api.io raw odds sample:', JSON.stringify(Array.isArray(firstResult) ? firstResult[0] : firstResult).slice(0, 400));
+    }
 
     var oddsArr = [];
     oddsResults.forEach(function(r) {
