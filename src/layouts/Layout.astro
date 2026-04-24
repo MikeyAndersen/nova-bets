@@ -127,11 +127,21 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
       }
 
       .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
         font-size: 1.2rem;
         font-weight: 800;
         color: var(--gold);
         text-decoration: none;
         letter-spacing: -0.02em;
+        flex-shrink: 0;
+      }
+
+      .wordmark-logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
         flex-shrink: 0;
       }
 
@@ -222,7 +232,10 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
   <body>
     {showNav && (
       <nav class="nav">
-        <a href="/" class="wordmark" id="wordmark">NovaBets</a>
+        <a href="/" class="wordmark" id="wordmark">
+          <img src="/favicon.svg" class="wordmark-logo" alt="Nova" />
+          <span id="wordmark-text">NovaBets</span>
+        </a>
         <div class="nav-spacer"></div>
         <div class="theme-switcher" id="themeSwitcher">
           <button class="mode-btn" data-mode="standard" title="Standard-tilstand">⚽</button>
@@ -254,7 +267,7 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
           document.documentElement.setAttribute('data-theme', mode);
           localStorage.setItem('nb_theme', mode);
           var m = MODES[mode] || MODES.standard;
-          var wm = document.getElementById('wordmark');
+          var wm = document.getElementById('wordmark-text');
           var bm = document.getElementById('btnMore');
           if (wm) wm.textContent = m.wordmark;
           if (bm) bm.textContent = m.btnMore;
