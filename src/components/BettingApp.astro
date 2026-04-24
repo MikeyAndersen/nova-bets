@@ -492,7 +492,7 @@
         return fetch(
           'https://api.the-odds-api.com/v4/sports/' + key +
           '/odds/?apiKey=' + ODDS_API_KEY +
-          '&regions=uk&bookmakers=bet365&markets=h2h&oddsFormat=decimal'
+          '&regions=eu&bookmakers=bet365&markets=h2h&oddsFormat=decimal'
         )
           .then(function(r) { return r.ok ? r.json() : []; })
           .catch(function() { return []; });
