@@ -429,33 +429,23 @@
 
 <script is:inline>
 (function () {
-  var LEAGUE_MAP = {
-    soccer_epl:                           { apif: 39,  name: 'Premier League' },
-    soccer_uefa_champs_league:            { apif: 2,   name: 'Champions League' },
-    soccer_uefa_europa_league:            { apif: 3,   name: 'Europa League' },
-    soccer_uefa_europa_conference_league: { apif: 848, name: 'Conference League' },
-    soccer_germany_bundesliga:            { apif: 78,  name: 'Bundesliga' },
-    soccer_germany_bundesliga2:           { apif: 79,  name: '2. Bundesliga' },
-    soccer_spain_la_liga:                 { apif: 140, name: 'La Liga' },
-    soccer_spain_segunda_division:        { apif: 141, name: 'La Liga 2' },
-    soccer_italy_serie_a:                 { apif: 135, name: 'Serie A' },
-    soccer_italy_serie_b:                 { apif: 136, name: 'Serie B' },
-    soccer_france_ligue_one:              { apif: 61,  name: 'Ligue 1' },
-    soccer_france_ligue_two:              { apif: 62,  name: 'Ligue 2' },
-    soccer_denmark_superliga:             { apif: 119, name: 'Superliga' },
-    soccer_netherlands_eredivisie:        { apif: 88,  name: 'Eredivisie' },
-    soccer_portugal_primeira_liga:        { apif: 94,  name: 'Primeira Liga' },
-    soccer_turkey_super_league:           { apif: 203, name: 'Süper Lig' },
-    soccer_norway_eliteserien:            { apif: 103, name: 'Eliteserien' }
-  };
-  var LEAGUES = Object.keys(LEAGUE_MAP);
+  var LEAGUES = [39, 2, 3, 848, 78, 79, 140, 135, 61, 119, 88, 94];
 
-  var ODDS_API_KEY   = '3a9a2207c105619994c376d25f8b34ed';
-  var APIF_KEY       = '66466592dc0296d8fdc06408bfeecf40';
-  var APIF_BASE      = 'https://v3.football.api-sports.io';
+  var LEAGUE_NAMES = {
+    39: 'Premier League',    2: 'Champions League',
+    3: 'Europa League',      848: 'Conference League',
+    78: 'Bundesliga',        79: '2. Bundesliga',
+    140: 'La Liga',          135: 'Serie A',
+    61: 'Ligue 1',           119: 'Superliga',
+    88: 'Eredivisie',        94: 'Primeira Liga'
+  };
+
+  var APIF_KEY  = '66466592dc0296d8fdc06408bfeecf40';
+  var APIF_BASE = 'https://v3.football.api-sports.io';
+  var PROXY     = 'https://corsproxy.io/?url=';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
-  var CACHE_TTL_MS   = 1 * 60 * 1000; // 1 minute
+  var CACHE_TTL_MS   = 1 * 60 * 1000;
 
   var matchStore = {};
   var current = null;
@@ -482,71 +472,22 @@
       String(n.getUTCMonth() + 1).padStart(2, '0') + '-' +
       String(n.getUTCDate()).padStart(2, '0');
   }
-  function todayRange() {
-    var n = new Date();
-    return {
-      from: new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 0, 0, 0)).toISOString(),
-      to:   new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 23, 59, 59)).toISOString()
-    };
-  }
-  function weekRange() {
-    return {
-      from: new Date().toISOString(),
-      to:   new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    };
+  function futureDateStr(daysAhead) {
+    var n = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+    return n.getUTCFullYear() + '-' +
+      String(n.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(n.getUTCDate()).padStart(2, '0');
   }
   function selectionLabel(outcome, homeTeam, awayTeam) {
     if (outcome === 'Draw') return 'Uafgjort';
     if (outcome === homeTeam) return homeTeam + ' vinder';
     return awayTeam + ' vinder';
   }
-  function setQuotaDisplay(value) {
-    var el = document.getElementById('apiQuota');
-    if (el) el.textContent = 'API-kald tilbage: ' + value;
-  }
-
-  /* ── Normalise: Odds API raw match → common shape ── */
-  function normalizeOddsApiMatch(m) {
-    var bookmakers = m.bookmakers || [];
-    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; });
-    var bmName = 'bet365';
-    if (!bm) {
-      bm = bookmakers.find(function(b) {
-        return b.markets && b.markets.some(function(mk) { return mk.key === 'h2h'; });
-      });
-      if (bm) bmName = bm.title || bm.key;
-    }
-    var market = bm && bm.markets && bm.markets.find(function(mk) { return mk.key === 'h2h'; });
-    if (!market) return null;
-    var ocs = market.outcomes || [];
-    var home = ocs.find(function(o) { return o.name === m.home_team; });
-    var away = ocs.find(function(o) { return o.name === m.away_team; });
-    var draw = ocs.find(function(o) { return o.name === 'Draw'; });
-    if (!home || !away || !draw) return null;
-    var info = LEAGUE_MAP[m.sport_key];
-    return {
-      id: m.id,
-      leagueName: info ? info.name : (m.sport_title || m.sport_key),
-      homeTeam: m.home_team,
-      awayTeam: m.away_team,
-      commenceTime: m.commence_time,
-      homeOdds: home.price,
-      drawOdds: draw.price,
-      awayOdds: away.price,
-      bookmaker: bmName,
-      source: 'odds-api'
-    };
-  }
 
   /* ── Normalise: API-Football fixture + odds → common shape ── */
   function normalizeApifMatch(fixture, oddsResp, leagueName) {
     var bookmakers = oddsResp && oddsResp[0] && oddsResp[0].bookmakers || [];
-    var bm = bookmakers.find(function(b) { return b.id === 8; }); // 8 = bet365
-    var bmName = 'Bet365';
-    if (!bm) {
-      bm = bookmakers[0];
-      if (bm) bmName = bm.name || String(bm.id);
-    }
+    var bm = bookmakers.find(function(b) { return b.id === 8; }); // bet365
     if (!bm) return null;
     var matchWinner = (bm.bets || []).find(function(b) {
       return b.id === 1 || b.name === 'Match Winner';
@@ -566,9 +507,44 @@
       homeOdds: parseFloat(home.odd),
       drawOdds: parseFloat(draw.odd),
       awayOdds: parseFloat(away.odd),
-      bookmaker: bmName,
+      bookmaker: 'Bet365',
       source: 'api-football'
     };
+  }
+
+  /* ── Step 1: Fetch fixtures for all leagues in parallel ── */
+  async function fetchFixtures(dateParam) {
+    var headers = { 'x-apisports-key': APIF_KEY };
+    var results = await Promise.all(
+      LEAGUES.map(function(leagueId) {
+        var url = APIF_BASE + '/fixtures?league=' + leagueId + '&season=2025&' + dateParam;
+        return fetch(PROXY + url, { headers: headers })
+          .then(function(r) { return r.json(); })
+          .catch(function() { return { response: [] }; });
+      })
+    );
+    var all = [];
+    results.forEach(function(r) {
+      (r.response || []).forEach(function(f) { all.push(f); });
+    });
+    return all;
+  }
+
+  /* ── Steps 2+3: Fetch odds for each fixture and normalise ── */
+  async function fetchOddsForFixtures(fixtures) {
+    var headers = { 'x-apisports-key': APIF_KEY };
+    var results = await Promise.all(
+      fixtures.slice(0, 20).map(function(f) {
+        var leagueId = f.league && f.league.id;
+        var leagueName = LEAGUE_NAMES[leagueId] || (f.league && f.league.name) || 'Ukendt liga';
+        var url = APIF_BASE + '/odds?fixture=' + f.fixture.id + '&bookmaker=8';
+        return fetch(PROXY + url, { headers: headers })
+          .then(function(r) { return r.json(); })
+          .catch(function() { return { response: [] }; })
+          .then(function(od) { return normalizeApifMatch(f, od.response || [], leagueName); });
+      })
+    );
+    return results.filter(Boolean);
   }
 
   /* ── Render helpers ── */
@@ -588,21 +564,14 @@
     var h = typeof match.homeOdds === 'number' ? match.homeOdds.toFixed(2) : '–';
     var d = typeof match.drawOdds === 'number' ? match.drawOdds.toFixed(2) : '–';
     var a = typeof match.awayOdds === 'number' ? match.awayOdds.toFixed(2) : '–';
-    var footer = '';
-    if (match.source === 'api-football') {
-      var lbl = 'via API-Football';
-      if (match.bookmaker && match.bookmaker.toLowerCase() !== 'bet365') lbl += ' · ' + match.bookmaker;
-      footer = '<div class="match-bookmaker">' + esc(lbl) + '</div>';
-    } else if (match.bookmaker && match.bookmaker !== 'bet365') {
-      footer = '<div class="match-bookmaker">' + esc(match.bookmaker) + '</div>';
-    }
     return '<div class="match-card">' +
       '<div class="match-time">' + esc(fmtDate(match.commenceTime)) + '</div>' +
       '<div class="match-odds-row">' +
         oddsBtn(match.id, match.homeTeam, h) +
         oddsBtn(match.id, 'Draw', d) +
         oddsBtn(match.id, match.awayTeam, a) +
-      '</div>' + footer +
+      '</div>' +
+      '<div class="match-bookmaker">bet365 · via API-Football</div>' +
     '</div>';
   }
 
@@ -625,74 +594,6 @@
     return html;
   }
 
-  /* ── API fetchers ── */
-  async function checkLeagueEvents(from, to) {
-    return Promise.all(
-      LEAGUES.map(function(league) {
-        var url = 'https://api.the-odds-api.com/v4/sports/' + league +
-          '/events?apiKey=' + ODDS_API_KEY +
-          '&commenceTimeFrom=' + encodeURIComponent(from) +
-          '&commenceTimeTo='   + encodeURIComponent(to);
-        return fetch(url)
-          .then(function(r) { return r.ok ? r.json() : []; })
-          .catch(function() { return []; })
-          .then(function(events) {
-            return { league: league, hasEvents: Array.isArray(events) && events.length > 0 };
-          });
-      })
-    );
-  }
-
-  async function fetchOddsApi(leagues) {
-    var responses = await Promise.all(
-      leagues.map(function(league) {
-        var url = 'https://api.the-odds-api.com/v4/sports/' + league +
-          '/odds/?apiKey=' + ODDS_API_KEY +
-          '&regions=eu&markets=h2h&oddsFormat=decimal';
-        return fetch(url)
-          .then(function(r) {
-            var rem = r.headers.get('x-requests-remaining');
-            if (rem !== null) setQuotaDisplay(rem);
-            return r.ok ? r.json() : [];
-          })
-          .catch(function() { return []; });
-      })
-    );
-    var flat = responses.flat ? responses.flat() : [].concat.apply([], responses);
-    return flat.map(normalizeOddsApiMatch).filter(Boolean);
-  }
-
-  async function fetchApiFootball(leagues, dateStr) {
-    var headers = { 'x-apisports-key': APIF_KEY };
-    var results = [];
-    var leaguePromises = leagues.map(function(league) {
-      var info = LEAGUE_MAP[league];
-      if (!info) return Promise.resolve([]);
-      return fetch(APIF_BASE + '/fixtures?league=' + info.apif + '&season=2025&date=' + dateStr, { headers: headers })
-        .then(function(r) { return r.ok ? r.json() : { response: [] }; })
-        .catch(function() { return { response: [] }; })
-        .then(function(data) {
-          var fixtures = (data.response || []).filter(function(f) {
-            return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
-          });
-          if (!fixtures.length) return [];
-          return Promise.all(
-            fixtures.map(function(f) {
-              return fetch(APIF_BASE + '/odds?fixture=' + f.fixture.id + '&bookmaker=8', { headers: headers })
-                .then(function(r) { return r.ok ? r.json() : { response: [] }; })
-                .catch(function() { return { response: [] }; })
-                .then(function(od) { return normalizeApifMatch(f, od.response || [], info.name); });
-            })
-          );
-        });
-    });
-    var perLeague = await Promise.all(leaguePromises);
-    perLeague.forEach(function(arr) {
-      if (Array.isArray(arr)) arr.forEach(function(m) { if (m) results.push(m); });
-    });
-    return results;
-  }
-
   /* ── Main loader ── */
   async function loadOdds() {
     matchStore = {};
@@ -704,27 +605,22 @@
       var cachedData = localStorage.getItem(CACHE_KEY);
       if (cachedData && Date.now() - cachedTime < CACHE_TTL_MS) {
         allMatches = JSON.parse(cachedData);
-        setQuotaDisplay('–');
       } else {
-        // Step 1 — which leagues have events today? (free endpoint, no quota)
-        var range = todayRange();
-        var eventResults = await checkLeagueEvents(range.from, range.to);
-        var withEvents    = eventResults.filter(function(r) { return r.hasEvents;  }).map(function(r) { return r.league; });
-        var withoutEvents = eventResults.filter(function(r) { return !r.hasEvents; }).map(function(r) { return r.league; });
+        var today = todayDateStr();
 
-        // Step 2 — widen to 7 days if nothing today
-        if (withEvents.length === 0) {
-          range = weekRange();
-          var wk = await checkLeagueEvents(range.from, range.to);
-          withEvents    = wk.filter(function(r) { return r.hasEvents;  }).map(function(r) { return r.league; });
-          withoutEvents = wk.filter(function(r) { return !r.hasEvents; }).map(function(r) { return r.league; });
+        // Step 1 — today's NS fixtures across all leagues
+        var allFixtures = await fetchFixtures('date=' + today);
+        var fixtures = allFixtures.filter(function(f) {
+          return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
+        });
+
+        // Fallback — widen to next 7 days, no NS filter
+        if (!fixtures.length) {
+          fixtures = await fetchFixtures('from=' + today + '&to=' + futureDateStr(7));
         }
 
-        var dateStr = todayDateStr();
-        // Step 3 — fetch both sources in parallel
-        var oddsApiMatches = withEvents.length    > 0 ? await fetchOddsApi(withEvents)             : [];
-        var apifMatches    = withoutEvents.length > 0 ? await fetchApiFootball(withoutEvents, dateStr) : [];
-        allMatches = oddsApiMatches.concat(apifMatches);
+        // Steps 2+3 — odds + normalise (capped at 20 fixtures)
+        allMatches = await fetchOddsForFixtures(fixtures);
 
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
