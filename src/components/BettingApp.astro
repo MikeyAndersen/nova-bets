@@ -513,14 +513,18 @@
   }
 
   /* ── Step 1: Fetch fixtures for all leagues in parallel ── */
-  async function fetchFixtures(dateParam) {
+  async function fetchFixtures(dateParam, season) {
     var headers = { 'x-apisports-key': APIF_KEY };
     var results = await Promise.all(
       LEAGUES.map(function(leagueId) {
-        var url = APIF_BASE + '/fixtures?league=' + leagueId + '&season=2025&' + dateParam;
+        var url = APIF_BASE + '/fixtures?league=' + leagueId + '&season=' + season + '&' + dateParam;
         return fetch(PROXY + url, { headers: headers })
           .then(function(r) { return r.json(); })
-          .catch(function() { return { response: [] }; });
+          .catch(function() { return { response: [] }; })
+          .then(function(r) {
+            console.log('Fixtures response for league', leagueId, JSON.stringify(r).slice(0, 300));
+            return r;
+          });
       })
     );
     var all = [];
@@ -537,14 +541,22 @@
       fixtures.slice(0, 20).map(function(f) {
         var leagueId = f.league && f.league.id;
         var leagueName = LEAGUE_NAMES[leagueId] || (f.league && f.league.name) || 'Ukendt liga';
-        var url = APIF_BASE + '/odds?fixture=' + f.fixture.id + '&bookmaker=8';
+        var fixtureId = f.fixture.id;
+        var url = APIF_BASE + '/odds?fixture=' + fixtureId + '&bookmaker=8';
         return fetch(PROXY + url, { headers: headers })
           .then(function(r) { return r.json(); })
           .catch(function() { return { response: [] }; })
-          .then(function(od) { return normalizeApifMatch(f, od.response || [], leagueName); });
+          .then(function(od) {
+            console.log('Odds response for fixture', fixtureId, JSON.stringify(od).slice(0, 300));
+            var match = normalizeApifMatch(f, od.response || [], leagueName);
+            return match;
+          });
       })
     );
-    return results.filter(Boolean);
+    var matches = results.filter(Boolean);
+    console.log('Total matches after normalising:', matches.length);
+    console.log('Sample match:', JSON.stringify(matches[0]));
+    return matches;
   }
 
   /* ── Render helpers ── */
@@ -608,16 +620,35 @@
       } else {
         var today = todayDateStr();
 
-        // Step 1 — today's NS fixtures across all leagues
-        var allFixtures = await fetchFixtures('date=' + today);
+        // Step 1 — today's NS fixtures across all leagues (season 2025)
+        var allFixtures = await fetchFixtures('date=' + today, 2025);
         var fixtures = allFixtures.filter(function(f) {
           return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
         });
 
-        // Fallback — widen to next 7 days, no NS filter
+        // Season fallback — retry with 2024 if 2025 returned nothing
         if (!fixtures.length) {
-          fixtures = await fetchFixtures('from=' + today + '&to=' + futureDateStr(7));
+          console.log('No fixtures for season 2025, retrying with 2024');
+          allFixtures = await fetchFixtures('date=' + today, 2024);
+          fixtures = allFixtures.filter(function(f) {
+            return f.fixture && f.fixture.status && f.fixture.status.short === 'NS';
+          });
         }
+
+        console.log('Total fixtures found:', fixtures.length);
+        console.log('Sample fixture:', JSON.stringify(fixtures[0]));
+
+        // Date-range fallback — widen to next 7 days, no NS filter
+        if (!fixtures.length) {
+          console.log('No NS fixtures today, widening to 7 days');
+          fixtures = await fetchFixtures('from=' + today + '&to=' + futureDateStr(7), 2025);
+          if (!fixtures.length) {
+            fixtures = await fetchFixtures('from=' + today + '&to=' + futureDateStr(7), 2024);
+          }
+          console.log('Total fixtures found (7-day fallback):', fixtures.length);
+        }
+
+        console.log('Rendering matches:', fixtures.length);
 
         // Steps 2+3 — odds + normalise (capped at 20 fixtures)
         allMatches = await fetchOddsForFixtures(fixtures);
