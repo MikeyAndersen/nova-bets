@@ -455,7 +455,8 @@
     'soccer_fifa_world_cup'
   ];
 
-  var ODDS_API_KEY   = '3a9a2207c105619994c376d25f8b34ed';
+  var ODDS_API_KEY    = '3a9a2207c105619994c376d25f8b34ed';
+  var ODDS_API_IO_KEY = 'c9261af1065824f587395be2eb5865f2d73eeb66aa56bbde05b859a31f64990a';
   var CACHE_KEY      = 'nb_odds_cache';
   var CACHE_TIME_KEY = 'nb_odds_cache_time';
   var CACHE_TTL_MS   = 1 * 60 * 1000;
@@ -500,6 +501,68 @@
     );
     var matches = results.flat();
     console.log('Total matches loaded:', matches.length);
+    return matches;
+  }
+
+  /* ── Fetch from odds-api.io — returns Bet365 normalised matches ── */
+  async function fetchOddsApiIo() {
+    var eventsResp = await fetch(
+      'https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY +
+      '&sport=football&status=pending&limit=100'
+    ).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+
+    var events = Array.isArray(eventsResp) ? eventsResp
+      : (eventsResp && Array.isArray(eventsResp.data) ? eventsResp.data : []);
+
+    if (!events.length) return [];
+
+    var chunks = [];
+    for (var i = 0; i < events.length; i += 10) {
+      chunks.push(events.slice(i, i + 10));
+    }
+
+    var oddsResults = await Promise.all(
+      chunks.map(function(chunk) {
+        var ids = chunk.map(function(e) { return e.id; }).join(',');
+        return fetch(
+          'https://api.odds-api.io/v3/odds/multi?apiKey=' + ODDS_API_IO_KEY +
+          '&eventIds=' + ids + '&bookmakers=Bet365'
+        ).then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; });
+      })
+    );
+
+    var oddsArr = [];
+    oddsResults.forEach(function(r) {
+      if (Array.isArray(r)) r.forEach(function(x) { oddsArr.push(x); });
+      else if (r && Array.isArray(r.data)) r.data.forEach(function(x) { oddsArr.push(x); });
+    });
+
+    var oddsMap = {};
+    oddsArr.forEach(function(item) {
+      if (item && item.id != null) oddsMap[String(item.id)] = item;
+    });
+
+    var matches = [];
+    events.forEach(function(event) {
+      var odds = oddsMap[String(event.id)];
+      if (!odds || !odds.bookmakers || !odds.bookmakers['Bet365']) return;
+      var ml = (odds.bookmakers['Bet365'] || []).find(function(m) { return m.name === 'ML'; });
+      if (!ml || !ml.odds || !ml.odds[0]) return;
+      var o = ml.odds[0];
+      if (!o.home || !o.away) return;
+      matches.push({
+        id: 'oapio_' + event.id,
+        leagueName: event.league ? event.league.name : 'Football',
+        homeTeam: event.home,
+        awayTeam: event.away,
+        commenceTime: event.date,
+        homeOdds: parseFloat(o.home),
+        drawOdds: o.draw ? parseFloat(o.draw) : null,
+        awayOdds: parseFloat(o.away),
+        bookmaker: 'Bet365'
+      });
+    });
+    console.log('odds-api.io Bet365 matches:', matches.length);
     return matches;
   }
 
@@ -593,8 +656,16 @@
       if (cachedData && Date.now() - cachedTime < CACHE_TTL_MS) {
         allMatches = JSON.parse(cachedData);
       } else {
-        var raw = await fetchAllOdds();
-        allMatches = raw.map(normalizeMatch).filter(Boolean);
+        var fetched = await Promise.all([fetchOddsApiIo(), fetchAllOdds()]);
+        var bet365Matches = fetched[0];
+        var oddsApiMatches = fetched[1].map(normalizeMatch).filter(Boolean);
+
+        // deduplicate: skip Odds API matches already covered by Bet365
+        var seen = {};
+        bet365Matches.forEach(function(m) { seen[m.homeTeam + '|' + m.awayTeam] = true; });
+        var extras = oddsApiMatches.filter(function(m) { return !seen[m.homeTeam + '|' + m.awayTeam]; });
+
+        allMatches = bet365Matches.concat(extras);
         console.log('Normalised matches:', allMatches.length, JSON.stringify(allMatches[0]));
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
