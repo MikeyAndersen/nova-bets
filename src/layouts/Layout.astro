@@ -14,6 +14,12 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title} — NovaBets</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('nb_theme') || 'standard';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
     {requireAuth && (
       <script is:inline>
         if (!localStorage.getItem('nb_auth')) {
@@ -24,18 +30,59 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+      /* ── Standard (default) ── */
       :root {
-        --green:      #006442;
-        --mint:       #8FE1B0;
-        --gold:       #F2C744;
-        --dark:       #1a1f2e;
-        --surface:    #242938;
-        --surface2:   #2e3447;
-        --border:     #3a4058;
-        --text:       #e8eaf0;
-        --muted:      #8b92a8;
-        --text-muted: #8b92a8;
-        --font:       -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        --green:       #006442;
+        --green-hover: #00784f;
+        --mint:        #8FE1B0;
+        --mint-bg:     rgba(143,225,176,0.08);
+        --mint-border: rgba(143,225,176,0.18);
+        --gold:        #F2C744;
+        --dark:        #1a1f2e;
+        --surface:     #242938;
+        --surface2:    #2e3447;
+        --border:      #3a4058;
+        --text:        #e8eaf0;
+        --muted:       #8b92a8;
+        --text-muted:  #8b92a8;
+        --nav-bg:      rgba(26,31,46,0.96);
+        --font:        -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      }
+
+      /* ── Torben-tilstand 🇩🇰 ── */
+      [data-theme="torben"] {
+        --green:       #C60C30;
+        --green-hover: #A00828;
+        --mint:        #FF8FA0;
+        --mint-bg:     rgba(255,143,160,0.08);
+        --mint-border: rgba(255,143,160,0.2);
+        --gold:        #FFFFFF;
+        --dark:        #0D0508;
+        --surface:     #1A0B10;
+        --surface2:    #26121A;
+        --border:      #4A2030;
+        --text:        #F0E0E4;
+        --muted:       #9A7078;
+        --text-muted:  #9A7078;
+        --nav-bg:      rgba(13,5,8,0.96);
+      }
+
+      /* ── Nova-tilstand 🐕 ── */
+      [data-theme="nova"] {
+        --green:       #E07B10;
+        --green-hover: #C06808;
+        --mint:        #FFBC52;
+        --mint-bg:     rgba(255,188,82,0.08);
+        --mint-border: rgba(255,188,82,0.2);
+        --gold:        #FFE566;
+        --dark:        #130D06;
+        --surface:     #1E160A;
+        --surface2:    #2C1F0E;
+        --border:      #4A3218;
+        --text:        #F5E8D0;
+        --muted:       #9E7A50;
+        --text-muted:  #9E7A50;
+        --nav-bg:      rgba(19,13,6,0.96);
       }
 
       html { scroll-behavior: smooth; }
@@ -47,6 +94,7 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
         min-height: 100vh;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        transition: background 0.3s, color 0.3s;
       }
 
       /* Grain texture */
@@ -72,7 +120,7 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
         gap: 0.75rem;
         padding: 0 1.5rem;
         height: 58px;
-        background: rgba(26,31,46,0.96);
+        background: var(--nav-bg);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
         border-bottom: 1px solid var(--border);
@@ -89,14 +137,41 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
 
       .nav-spacer { flex: 1; }
 
+      /* Mode switcher */
+      .theme-switcher {
+        display: flex;
+        align-items: center;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 3px;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+
+      .mode-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.18rem 0.48rem;
+        border-radius: 999px;
+        font-size: 0.95rem;
+        line-height: 1;
+        transition: background 0.18s, opacity 0.18s;
+        opacity: 0.45;
+        font-family: var(--font);
+      }
+      .mode-btn:hover { opacity: 0.8; background: rgba(255,255,255,0.07); }
+      .mode-btn.active { background: var(--green); opacity: 1; }
+
       .balance-pill {
         color: var(--mint);
         font-weight: 600;
         font-size: 0.9rem;
-        background: rgba(143,225,176,0.08);
+        background: var(--mint-bg);
         padding: 0.3rem 0.7rem;
         border-radius: 999px;
-        border: 1px solid rgba(143,225,176,0.18);
+        border: 1px solid var(--mint-border);
         white-space: nowrap;
       }
 
@@ -113,7 +188,7 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
         white-space: nowrap;
         font-family: var(--font);
       }
-      .btn-more:hover { background: #00784f; }
+      .btn-more:hover { background: var(--green-hover); }
 
       .btn-logout {
         background: none;
@@ -140,14 +215,20 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
         .nav { padding: 0 1rem; gap: 0.5rem; }
         .btn-more { font-size: 0.72rem; padding: 0.32rem 0.6rem; }
         .main-wrap { padding: 1.25rem 1rem 5rem; }
+        .mode-btn { padding: 0.15rem 0.35rem; font-size: 0.82rem; }
       }
     </style>
   </head>
   <body>
     {showNav && (
       <nav class="nav">
-        <a href="/" class="wordmark">NovaBets</a>
+        <a href="/" class="wordmark" id="wordmark">NovaBets</a>
         <div class="nav-spacer"></div>
+        <div class="theme-switcher" id="themeSwitcher">
+          <button class="mode-btn" data-mode="standard" title="Standard-tilstand">⚽</button>
+          <button class="mode-btn" data-mode="torben" title="Torben-tilstand">🇩🇰</button>
+          <button class="mode-btn" data-mode="nova" title="Nova-tilstand">🐕</button>
+        </div>
         <span class="balance-pill" id="navBalance">–</span>
         <button class="btn-more" id="btnMore">Få 10.000 kr mere</button>
         <button class="btn-logout" id="btnLogout" title="Log ud" aria-label="Log ud">
@@ -163,6 +244,33 @@ const { title = 'NovaBets', showNav = true, requireAuth = false, fullHeight = fa
 
     <script is:inline>
       (function () {
+        var MODES = {
+          standard: { wordmark: 'NovaBets',     btnMore: 'Få 10.000 kr mere'       },
+          torben:   { wordmark: 'NovaBets 🇩🇰', btnMore: 'Mere penge, Torben! 💸'  },
+          nova:     { wordmark: 'NovaBets 🐕',   btnMore: 'Snup en godbid 🦴'       }
+        };
+
+        function applyMode(mode) {
+          document.documentElement.setAttribute('data-theme', mode);
+          localStorage.setItem('nb_theme', mode);
+          var m = MODES[mode] || MODES.standard;
+          var wm = document.getElementById('wordmark');
+          var bm = document.getElementById('btnMore');
+          if (wm) wm.textContent = m.wordmark;
+          if (bm) bm.textContent = m.btnMore;
+          document.querySelectorAll('.mode-btn').forEach(function (btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+          });
+        }
+
+        applyMode(localStorage.getItem('nb_theme') || 'standard');
+
+        document.querySelectorAll('.mode-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            applyMode(btn.getAttribute('data-mode'));
+          });
+        });
+
         function fmtKr(n) {
           return new Intl.NumberFormat('da-DK').format(Math.round(n)) + ' kr';
         }

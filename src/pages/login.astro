@@ -108,8 +108,8 @@ import Layout from '../layouts/Layout.astro';
     font-family: var(--font);
     margin-top: 0.2rem;
   }
-  .btn-login:hover { background: #00784f; }
-  .btn-login:active { background: #005035; }
+  .btn-login:hover { background: var(--green-hover); }
+  .btn-login:active { background: var(--green-hover); }
 </style>
 
 <script is:inline>
@@ -122,7 +122,7 @@ import Layout from '../layouts/Layout.astro';
       e.preventDefault();
       var pw = document.getElementById('pwInput');
       var err = document.getElementById('errMsg');
-      if (pw.value === 'novatech2024') {
+      if (pw.value === 'Torben') {
         localStorage.setItem('nb_auth', 'true');
         window.location.href = '/';
       } else {
