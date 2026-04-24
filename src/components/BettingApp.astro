@@ -505,15 +505,25 @@
 
   /* ── Normalise a raw Odds API match object ── */
   function normalizeMatch(match) {
+    var bookmakerKeys = (match.bookmakers || []).map(function(b) { return b.key; });
     var bm = (match.bookmakers || []).find(function(b) { return b.key === 'bet365'; });
-    if (!bm) return null;
+    if (!bm) {
+      console.log('No bet365 for', match.home_team, 'vs', match.away_team, '— bookmakers:', bookmakerKeys);
+      return null;
+    }
     var market = (bm.markets || []).find(function(m) { return m.key === 'h2h'; });
-    if (!market) return null;
+    if (!market) {
+      console.log('No h2h market for', match.home_team, 'vs', match.away_team);
+      return null;
+    }
     var outcomes = market.outcomes || [];
     var homeOutcome = outcomes.find(function(o) { return o.name === match.home_team; });
     var awayOutcome = outcomes.find(function(o) { return o.name === match.away_team; });
     var drawOutcome = outcomes.find(function(o) { return o.name === 'Draw'; });
-    if (!homeOutcome || !awayOutcome) return null;
+    if (!homeOutcome || !awayOutcome) {
+      console.log('Missing home/away outcome for', match.home_team, 'vs', match.away_team, '— outcomes:', outcomes.map(function(o) { return o.name; }));
+      return null;
+    }
     return {
       id: match.id,
       leagueName: match.sport_title,
@@ -556,6 +566,7 @@
   }
 
   function renderMatches(matches) {
+    console.log('Render called with:', matches.length, 'matches');
     var byLeague = {};
     matches.forEach(function(m) {
       var lg = m.leagueName || 'Ukendt liga';
@@ -593,6 +604,7 @@
       } else {
         var raw = await fetchAllOdds();
         allMatches = raw.map(normalizeMatch).filter(Boolean);
+        console.log('Normalised matches:', allMatches.length, JSON.stringify(allMatches[0]));
         localStorage.setItem(CACHE_KEY, JSON.stringify(allMatches));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
       }
