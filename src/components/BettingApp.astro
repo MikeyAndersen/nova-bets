@@ -423,7 +423,7 @@
         var res = await fetch(
           'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
           '/odds/?apiKey=' + ODDS_API_KEYS[k] +
-          '&regions=eu&markets=h2h&oddsFormat=decimal'
+          '&regions=eu&markets=h2h&oddsFormat=decimal&bookmakers=bet365'
         ).catch(function() { return { ok: false, status: 0 }; });
         if (res.ok) { result = await res.json(); break; }
         if (res.status !== 401 && res.status !== 429) break; // unexpected error, don't retry
@@ -460,9 +460,11 @@
     var bet365 = bmList.find(function(b) {
       return (b.name || b.key || b.slug || '').toLowerCase().indexOf('bet365') !== -1;
     });
-    var chosenBm = bet365
-      ? (bet365.name || bet365.key || bet365.slug)
-      : (bmList[0].name || bmList[0].key || bmList[0].slug);
+    if (!bet365) {
+      console.log('odds-api.io: Bet365 not available in bookmaker list');
+      return [];
+    }
+    var chosenBm = bet365.name || bet365.key || bet365.slug;
 
     console.log('odds-api.io using bookmaker:', chosenBm);
 
@@ -528,7 +530,7 @@
   /* ── Normalise a raw Odds API match object ── */
   function normalizeMatch(match) {
     var bookmakers = match.bookmakers || [];
-    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; }) || bookmakers[0];
+    var bm = bookmakers.find(function(b) { return b.key === 'bet365'; });
     if (!bm) return null;
     var market = (bm.markets || []).find(function(m) { return m.key === 'h2h'; });
     if (!market) return null;
