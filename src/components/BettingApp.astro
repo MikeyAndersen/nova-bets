@@ -383,8 +383,8 @@
     'c2be06815c1270ef08b60c8b7d72111d'
   ];
   var ODDS_API_IO_KEY = 'c9261af1065824f587395be2eb5865f2d73eeb66aa56bbde05b859a31f64990a';
-  var CACHE_KEY      = 'nb_odds_cache';
-  var CACHE_TIME_KEY = 'nb_odds_cache_time';
+  var CACHE_KEY      = 'nb_odds_cache_v2';
+  var CACHE_TIME_KEY = 'nb_odds_cache_time_v2';
   var CACHE_TTL_MS   = 30 * 60 * 1000;
 
   var matchStore = {};
@@ -504,9 +504,9 @@
     events.forEach(function(event) {
       var odds = oddsMap[String(event.id)];
       if (!odds || !odds.bookmakers) return;
-      var bmData = odds.bookmakers[chosenBm] || odds.bookmakers[Object.keys(odds.bookmakers)[0]];
-      var actualBm = odds.bookmakers[chosenBm] ? chosenBm : Object.keys(odds.bookmakers)[0];
+      var bmData = odds.bookmakers[chosenBm];
       if (!bmData) return;
+      var actualBm = chosenBm;
       var ml = bmData.find ? bmData.find(function(m) { return m.name === 'ML'; }) : null;
       if (!ml || !ml.odds || !ml.odds[0]) return;
       var o = ml.odds[0];
