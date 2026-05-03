@@ -411,8 +411,7 @@
     'soccer_portugal_primeira_liga',
     'soccer_turkey_super_league',
     'soccer_norway_eliteserien',
-    'soccer_sweden_allsvenskan',
-    'soccer_scotland_premiership'
+    'soccer_sweden_allsvenskan'
   ];
 
   var ODDS_API_KEYS   = [
@@ -610,7 +609,11 @@
   /* ── Normalise a raw Odds API match object ── */
   function normalizeMatch(match) {
     var bookmakers = match.bookmakers || [];
+    // Prefer Bet365; fall back to any bookmaker that has an h2h market
     var bm = bookmakers.find(function(b) { return b.key === 'bet365'; });
+    if (!bm) bm = bookmakers.find(function(b) {
+      return (b.markets || []).some(function(m) { return m.key === 'h2h'; });
+    });
     if (!bm) return null;
     var market = (bm.markets || []).find(function(m) { return m.key === 'h2h'; });
     if (!market) return null;
