@@ -423,7 +423,7 @@
         var res = await fetch(
           'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
           '/odds/?apiKey=' + ODDS_API_KEYS[k] +
-          '&regions=eu&markets=h2h&oddsFormat=decimal&bookmakers=bet365'
+          '&regions=eu&markets=h2h&oddsFormat=decimal'
         ).catch(function() { return { ok: false, status: 0 }; });
         if (res.ok) { result = await res.json(); break; }
         if (res.status !== 401 && res.status !== 429) break; // unexpected error, don't retry
