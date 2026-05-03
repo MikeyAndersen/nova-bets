@@ -236,6 +236,43 @@
   .match-odds-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; }
   .match-bookmaker { font-size: 0.63rem; color: rgba(255,255,255,0.2); text-align: right; margin-top: 0.4rem; }
 
+  /* ── Live badge ── */
+  .match-card--live { border-color: rgba(239,68,68,0.35); }
+  .live-badge-wrap { margin-left: auto; flex-shrink: 0; }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 0.28rem;
+    background: rgba(239,68,68,0.12); color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 4px; padding: 0.1rem 0.42rem;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .live-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #ef4444; flex-shrink: 0;
+    animation: livepulse 1.2s ease-in-out infinite;
+  }
+  @keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  /* ── Totals (over/under goals) ── */
+  .totals-section {
+    margin-top: 0.6rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+  }
+  .totals-header {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem;
+  }
+  .totals-row {
+    display: grid; grid-template-columns: 2rem 1fr 1fr;
+    gap: 0.35rem; align-items: center; margin-bottom: 0.3rem;
+  }
+  .totals-row:last-child { margin-bottom: 0; }
+  .totals-point {
+    font-size: 0.72rem; font-weight: 700; color: var(--muted); text-align: center;
+  }
+
   /* ── Odds buttons ── */
   .odds-btn {
     background: var(--surface2); border: 1px solid var(--border);
@@ -383,8 +420,8 @@
     'c2be06815c1270ef08b60c8b7d72111d'
   ];
   var ODDS_API_IO_KEY = 'c9261af1065824f587395be2eb5865f2d73eeb66aa56bbde05b859a31f64990a';
-  var CACHE_KEY      = 'nb_odds_cache_v2';
-  var CACHE_TIME_KEY = 'nb_odds_cache_time_v2';
+  var CACHE_KEY      = 'nb_odds_cache_v3';
+  var CACHE_TIME_KEY = 'nb_odds_cache_time_v3';
   var CACHE_TTL_MS   = 30 * 60 * 1000;
 
   var matchStore = {};
@@ -410,6 +447,8 @@
   function selectionLabel(outcome, homeTeam, awayTeam) {
     if (outcome === 'Draw') return 'Uafgjort';
     if (outcome === homeTeam) return homeTeam + ' vinder';
+    if (/^Over \d/.test(outcome)) return outcome.replace('Over ', 'Over ') + ' mål';
+    if (/^Under \d/.test(outcome)) return outcome.replace('Under ', 'Under ') + ' mål';
     return awayTeam + ' vinder';
   }
 
@@ -423,7 +462,7 @@
         var res = await fetch(
           'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
           '/odds/?apiKey=' + ODDS_API_KEYS[k] +
-          '&regions=eu&markets=h2h&oddsFormat=decimal'
+          '&regions=eu&markets=h2h,totals&oddsFormat=decimal'
         ).catch(function() { return { ok: false, status: 0 }; });
         if (res.ok) { result = await res.json(); break; }
         if (res.status !== 401 && res.status !== 429) break; // unexpected error, don't retry
@@ -441,7 +480,7 @@
     var parallel = await Promise.all([
       fetch('https://api.odds-api.io/v3/bookmakers?apiKey=' + ODDS_API_IO_KEY)
         .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-      fetch('https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY + '&sport=football&status=pending&limit=100')
+      fetch('https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY + '&sport=football&limit=100')
         .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
     ]);
 
@@ -507,19 +546,44 @@
       var bmData = odds.bookmakers[chosenBm];
       if (!bmData) return;
       var actualBm = chosenBm;
-      var ml = bmData.find ? bmData.find(function(m) { return m.name === 'ML'; }) : null;
+      var markets = Array.isArray(bmData) ? bmData : [];
+      var ml = markets.find(function(m) { return m.name === 'ML'; });
       if (!ml || !ml.odds || !ml.odds[0]) return;
       var o = ml.odds[0];
       if (!o.home || !o.away) return;
+
+      // Extract over/under totals from OU market
+      var totalsLines = [];
+      var ouMarket = markets.find(function(m) { return m.name === 'OU' || m.name === 'TG' || m.name === 'Goals'; });
+      if (ouMarket && Array.isArray(ouMarket.odds)) {
+        var ptMap = {};
+        ouMarket.odds.forEach(function(line) {
+          var pt = line.point != null ? String(line.point) : null;
+          if (!pt) return;
+          if (!ptMap[pt]) ptMap[pt] = {};
+          if (line.over != null) ptMap[pt].over = parseFloat(line.over);
+          if (line.under != null) ptMap[pt].under = parseFloat(line.under);
+          if (line.name === 'Over' && line.price != null) ptMap[pt].over = parseFloat(line.price);
+          if (line.name === 'Under' && line.price != null) ptMap[pt].under = parseFloat(line.price);
+        });
+        Object.keys(ptMap).sort(function(a,b){return parseFloat(a)-parseFloat(b);}).forEach(function(pt) {
+          if (ptMap[pt].over && ptMap[pt].under) {
+            totalsLines.push({ point: parseFloat(pt), over: ptMap[pt].over, under: ptMap[pt].under });
+          }
+        });
+      }
+
       matches.push({
         id: 'oapio_' + event.id,
         leagueName: event.league ? event.league.name : 'Football',
         homeTeam: event.home,
         awayTeam: event.away,
         commenceTime: event.date,
+        isLive: event.status === 'live' || event.status === 'inplay' || event.status === 'inprogress',
         homeOdds: parseFloat(o.home),
         drawOdds: o.draw ? parseFloat(o.draw) : null,
         awayOdds: parseFloat(o.away),
+        totalsLines: totalsLines,
         bookmaker: actualBm
       });
     });
@@ -539,15 +603,36 @@
     var awayOutcome = outcomes.find(function(o) { return o.name === match.away_team; });
     var drawOutcome = outcomes.find(function(o) { return o.name === 'Draw'; });
     if (!homeOutcome || !awayOutcome) return null;
+
+    // Extract totals (over/under goals) from the totals market
+    var totalsLines = [];
+    var totalsMarket = (bm.markets || []).find(function(m) { return m.key === 'totals'; });
+    if (totalsMarket) {
+      var ptMap = {};
+      (totalsMarket.outcomes || []).forEach(function(o) {
+        var pt = o.point != null ? String(o.point) : null;
+        if (!pt) return;
+        if (!ptMap[pt]) ptMap[pt] = {};
+        ptMap[pt][o.name] = o.price;
+      });
+      Object.keys(ptMap).sort(function(a,b){return parseFloat(a)-parseFloat(b);}).forEach(function(pt) {
+        if (ptMap[pt]['Over'] && ptMap[pt]['Under']) {
+          totalsLines.push({ point: parseFloat(pt), over: ptMap[pt]['Over'], under: ptMap[pt]['Under'] });
+        }
+      });
+    }
+
     return {
       id: match.id,
       leagueName: match.sport_title,
       homeTeam: match.home_team,
       awayTeam: match.away_team,
       commenceTime: match.commence_time,
+      isLive: new Date(match.commence_time) < new Date(),
       homeOdds: homeOutcome.price,
       drawOdds: drawOutcome ? drawOutcome.price : null,
       awayOdds: awayOutcome.price,
+      totalsLines: totalsLines,
       bookmaker: bm.title || bm.key
     };
   }
@@ -568,11 +653,33 @@
     var h = typeof match.homeOdds === 'number' ? match.homeOdds.toFixed(2) : '–';
     var d = typeof match.drawOdds === 'number' ? match.drawOdds.toFixed(2) : '–';
     var a = typeof match.awayOdds === 'number' ? match.awayOdds.toFixed(2) : '–';
-    return '<div class="match-card">' +
+
+    var liveBadge = match.isLive
+      ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>'
+      : '';
+
+    var totalsHtml = '';
+    if (match.totalsLines && match.totalsLines.length) {
+      var rows = match.totalsLines.map(function(line) {
+        var ov = line.over.toFixed(2);
+        var un = line.under.toFixed(2);
+        return '<div class="totals-row">' +
+          '<span class="totals-point">' + line.point + '</span>' +
+          oddsBtn(match.id, 'Over ' + line.point, ov, 'Over') +
+          oddsBtn(match.id, 'Under ' + line.point, un, 'Under') +
+        '</div>';
+      }).join('');
+      totalsHtml = '<div class="totals-section">' +
+        '<div class="totals-header">Mål</div>' + rows +
+      '</div>';
+    }
+
+    return '<div class="match-card' + (match.isLive ? ' match-card--live' : '') + '">' +
       '<div class="match-teams">' +
         '<span class="team-name home">' + esc(match.homeTeam) + '</span>' +
         '<span class="vs-sep">vs</span>' +
         '<span class="team-name away">' + esc(match.awayTeam) + '</span>' +
+        (liveBadge ? '<span class="live-badge-wrap">' + liveBadge + '</span>' : '') +
       '</div>' +
       '<div class="match-time">' + esc(fmtDate(match.commenceTime)) + '</div>' +
       '<div class="match-odds-row">' +
@@ -580,6 +687,7 @@
         oddsBtn(match.id, 'Draw', d, 'Uafgjort') +
         oddsBtn(match.id, match.awayTeam, a, '2') +
       '</div>' +
+      totalsHtml +
       '<div class="match-bookmaker">' + esc(match.bookmaker) + '</div>' +
     '</div>';
   }
@@ -632,6 +740,8 @@
     strip.style.display = '';
     scroll.innerHTML = active.map(function(b) {
       var sel = b.selection === 'Draw' ? 'Uafgjort'
+        : /^Over \d/.test(b.selection) ? b.selection + ' mål'
+        : /^Under \d/.test(b.selection) ? b.selection + ' mål'
         : b.selection === b.homeTeam ? b.homeTeam + ' vinder'
         : b.awayTeam + ' vinder';
       return '<div class="strip-card">' +
