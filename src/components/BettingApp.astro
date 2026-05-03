@@ -420,8 +420,8 @@
     'c2be06815c1270ef08b60c8b7d72111d'
   ];
   var ODDS_API_IO_KEY = 'c9261af1065824f587395be2eb5865f2d73eeb66aa56bbde05b859a31f64990a';
-  var CACHE_KEY      = 'nb_odds_cache_v3';
-  var CACHE_TIME_KEY = 'nb_odds_cache_time_v3';
+  var CACHE_KEY      = 'nb_odds_cache_v4';
+  var CACHE_TIME_KEY = 'nb_odds_cache_time_v4';
   var CACHE_TTL_MS   = 30 * 60 * 1000;
 
   var matchStore = {};
@@ -459,13 +459,18 @@
       if (i > 0) await new Promise(function(r) { setTimeout(r, 150); });
       var result = [];
       for (var k = 0; k < ODDS_API_KEYS.length; k++) {
-        var res = await fetch(
-          'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
+        var base = 'https://api.the-odds-api.com/v4/sports/' + LEAGUES[i] +
           '/odds/?apiKey=' + ODDS_API_KEYS[k] +
-          '&regions=eu&markets=h2h,totals&oddsFormat=decimal'
-        ).catch(function() { return { ok: false, status: 0 }; });
+          '&regions=eu&oddsFormat=decimal&bookmakers=bet365';
+        // Try h2h+totals first; fall back to h2h only if the league doesn't support totals
+        var res = await fetch(base + '&markets=h2h,totals')
+          .catch(function() { return { ok: false, status: 0 }; });
+        if (!res.ok && (res.status === 404 || res.status === 422)) {
+          res = await fetch(base + '&markets=h2h')
+            .catch(function() { return { ok: false, status: 0 }; });
+        }
         if (res.ok) { result = await res.json(); break; }
-        if (res.status !== 401 && res.status !== 429) break; // unexpected error, don't retry
+        if (res.status !== 401 && res.status !== 429) break;
         console.log('Key', k, 'failed (' + res.status + ') for', LEAGUES[i] + ', trying next key');
       }
       if (Array.isArray(result)) matches = matches.concat(result);
@@ -476,19 +481,30 @@
 
   /* ── Fetch from odds-api.io — prefers Bet365, falls back to first available ── */
   async function fetchOddsApiIo() {
-    // Bookmakers and events in parallel
+    // Bookmakers, pending events, and live events in parallel
     var parallel = await Promise.all([
       fetch('https://api.odds-api.io/v3/bookmakers?apiKey=' + ODDS_API_IO_KEY)
         .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-      fetch('https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY + '&sport=football&limit=100')
+      fetch('https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY + '&sport=football&status=pending&limit=100')
+        .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('https://api.odds-api.io/v3/events?apiKey=' + ODDS_API_IO_KEY + '&sport=football&status=live&limit=50')
         .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
     ]);
 
-    var bmRaw  = parallel[0];
-    var evRaw  = parallel[1];
+    var bmRaw     = parallel[0];
+    var evPending = parallel[1];
+    var evLive    = parallel[2];
+
+    // Merge pending + live, deduplicating by id
+    function toArr(r) { return Array.isArray(r) ? r : (r && Array.isArray(r.data) ? r.data : []); }
+    var seen = {};
+    var evRaw = { data: [] };
+    toArr(evPending).concat(toArr(evLive)).forEach(function(e) {
+      if (!seen[e.id]) { seen[e.id] = true; evRaw.data.push(e); }
+    });
 
     var bmList = Array.isArray(bmRaw) ? bmRaw : (bmRaw && Array.isArray(bmRaw.data) ? bmRaw.data : []);
-    var events = Array.isArray(evRaw) ? evRaw : (evRaw && Array.isArray(evRaw.data) ? evRaw.data : []);
+    var events = evRaw.data;
 
     console.log('odds-api.io bookmakers:', bmList.map(function(b) { return b.name || b.key || b.slug; }));
     console.log('odds-api.io events fetched:', events.length);
